@@ -122,13 +122,12 @@ p.done{color:#1a7f37;font-size:14px;height:20px;margin:8px 0 0}
 <body>
 <main>
 <p class="hint" id="hint">点击复制，粘贴到自己的个人代理里面</p>
-<textarea id="t" rows="5" readonly></textarea>
+<textarea id="t" rows="5" readonly>${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
 <p class="done" id="done"></p>
 </main>
 <script>
-var TEXT = ${JSON.stringify(PROMPT_TEXT)};
 var t = document.getElementById('t');
-t.value = TEXT;
+var TEXT = t.value;
 t.addEventListener('click', function () {
   function ok() {
     var d = document.getElementById('done');

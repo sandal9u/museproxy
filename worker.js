@@ -328,12 +328,12 @@ async function handlePaste(request, env, KEY, url, sub) {
     await env.PASTE.delete(sub);
     return htmlResp(gonePage("文件已过期，已清除"), 410);
   }
-  // 不论文本还是文件，点击一律直接下载，不做任何解析呈现
+  // 不强制下载：浏览器能解析的（图片/PDF/文本等）直接显示，解析不了的才下载；filename* 给浏览器作保存名（原名）
   const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^\d+-/, "");
   const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });
   obj.writeHttpMetadata(headers);
   if (!headers.get("Content-Type")) headers.set("Content-Type", "application/octet-stream");
-  headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(orig));
+  headers.set("Content-Disposition", "inline; filename*=UTF-8''" + encodeURIComponent(orig));
   return new Response(obj.body, { headers });
 }
 

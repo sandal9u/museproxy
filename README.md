@@ -6,11 +6,18 @@
 ## 用法
 
 ```
-https://px.nbfun.com/<KEY>/https://目标网址
+https://px.nbfun.com/https://目标网址
 ```
 
-代理前缀后面直接跟原始网址，不做任何编码；也可以打开前缀根地址，粘贴网址回车即走。
+域名后直接跟原始网址，不做任何编码。首次使用先打开一次带授权码的地址
+`https://px.nbfun.com/<KEY>/`（粘贴框页），浏览器即种下 30 天授权 Cookie，
+之后 /https 直达入口可用；带码入口 `/<KEY>/https://目标网址` 长期有效。
 链接、图片、表单、重定向、Cookie 都在代理内回转：经代理登录一次，Cookie 按目标站点分别保存在浏览器里（路径作用域隔离），之后再访问不再弹登录/授权。
+
+## 伪装与禁爬
+
+- 根路径与一切未授权访问（含无 Cookie 直访真入口）一律返回 nginx 默认欢迎页（200），不暴露代理存在。
+- robots.txt 全站 `Disallow: /`，所有响应带 `X-Robots-Tag: noindex, nofollow, noarchive`。
 
 ## 设计口径
 

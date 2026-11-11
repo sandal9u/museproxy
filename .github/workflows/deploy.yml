@@ -27,6 +27,8 @@ jobs:
             sleep 10
           done
           test "$code" = "200"
-          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.nbfun.com/https://example.com/")
-          echo "no-key request: $code2"
-          test "$code2" = "404"
+          root=$(curl -s --max-time 30 "https://px.nbfun.com/")
+          echo "$root" | grep -q "Welcome to nginx" && echo "root decoy OK"
+          direct=$(curl -s --max-time 30 "https://px.nbfun.com/https://example.com/")
+          echo "$direct" | grep -q "Welcome to nginx" && echo "unauthenticated direct entry sees decoy OK"
+          curl -s --max-time 30 "https://px.nbfun.com/robots.txt" | grep -q "Disallow: /" && echo "robots OK"

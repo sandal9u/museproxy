@@ -75,6 +75,19 @@ curl -H "X-Px-Key: 你的授权码" "https://你的域名/https/example.com/"
 
 启用条件：在 Cloudflare 控制台的 R2 里先建一个存储桶（默认名 `pxnbfun`，与 wrangler.jsonc 里 r2_buckets 的 bucket_name 对上即可）。存储几乎总是空的（30 分钟就清），费用可忽略。
 
+命令行（curl）同样可用，授权走 `X-Px-Key` 请求头：
+
+```bash
+# 传文件（PUT，路径末尾是文件名；返回一行最终链接）
+curl -T 报告.pdf -H "X-Px-Key: <你的key>" https://px.example.com/paste/报告.pdf
+# 传文件（表单方式）
+curl -F "file=@报告.pdf" -H "X-Px-Key: <你的key>" https://px.example.com/paste
+# 传一段文本
+curl -F "text=要中转的文字" -H "X-Px-Key: <你的key>" https://px.example.com/paste
+# 取文件（-J 用原始文件名保存）
+curl -J -H "X-Px-Key: <你的key>" "https://px.example.com/paste/<目录页里的文件名>"
+```
+
 ## 已知限制（先说清楚）
 
 - px 的出口是 Cloudflare 的机房 IP。少数防护很严的网站会直接拦机房 IP（最典型的是 Google 搜索，会跳人机验证），这类网站走不通，换个搜索引擎（比如 Bing）通常就行。这不是 px 的毛病，是这类网站的一贯做法。

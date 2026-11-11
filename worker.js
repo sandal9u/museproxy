@@ -142,6 +142,7 @@ const pasteRemainMin = (o) => Math.max(0, Math.ceil((PASTE_TTL_MS - pasteAge(o))
 const pasteExpired = (o) => pasteAge(o) > PASTE_TTL_MS;
 const htmlResp = (html, status = 200) => new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
 const jsonResp = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "X-Robots-Tag": ROBOTS_TAG } });
+const textResp = (s, status = 200) => new Response(s, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
 
 function sanitizeName(name) {
   const s = String(name || "").split(/[\\/]/).pop().replace(/[\x00-\x1f\x7f?#%<>"|]/g, "_").trim().slice(0, 100);
@@ -268,6 +269,21 @@ async function handlePaste(request, env, KEY, url, sub) {
     return new Response("method not allowed", { status: 405 });
   }
 
+  // curl 上传：PUT /paste/<文件名>，原始请求体即文件内容，回纯文本给出最终链接
+  if (request.method === "PUT") {
+    const buf = await request.arrayBuffer();
+    if (buf.byteLength > PASTE_MAX_FILE) return textResp("单个文件不能超过 100 MB\n", 413);
+    const objs = await listAllPaste(env);
+    if (objs.length >= PASTE_MAX_FILES) return textResp("站内文件已满（200 个），等过期后再传\n", 429);
+    const total = objs.reduce((s, o) => s + o.size, 0);
+    if (total + buf.byteLength > PASTE_MAX_TOTAL) return textResp("站内总量已满（1 GB）\n", 429);
+    const orig = sanitizeName(sub);
+    const stored = await uniquePasteName(env, orig);
+    const ctype = request.headers.get("Content-Type") || "application/octet-stream";
+    const kind = ctype.startsWith("text/plain") ? "text" : "file";
+    await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: orig } });
+    return textResp("ok\n" + url.origin + "/paste/" + encodeURIComponent(stored) + "\n");
+  }
   if (request.method === "DELETE") {
     await env.PASTE.delete(sub);
     return jsonResp({ ok: true });
@@ -281,7 +297,7 @@ async function handlePaste(request, env, KEY, url, sub) {
   }
   const kind = (obj.customMetadata && obj.customMetadata.kind) || "file";
   const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^[a-z0-9]+-/, "");
-  if (kind === "text" && !url.searchParams.has("dl")) {
+  if (kind === "text" && !url.searchParams.has("dl") && isBrowser) {
     return htmlResp(pasteTextPage(sub, await obj.text(), obj));
   }
   const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });

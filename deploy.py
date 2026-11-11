@@ -11,7 +11,7 @@ import uuid
 
 ACCT = os.environ["CLOUDFLARE_ACCOUNT_ID"]
 TOKEN = os.environ["CLOUDFLARE_API_TOKEN"]
-SCRIPT = "px"
+SCRIPT = "px-nbfun"
 API = "https://api.cloudflare.com/client/v4"
 
 

@@ -5,7 +5,7 @@
 ## 用法
 
 ```
-https://px.gorou-public.workers.dev/<KEY>/https://目标网址
+https://px-nbfun.gorou-public.workers.dev/<KEY>/https://目标网址
 ```
 
 代理前缀后面直接跟原始网址，不做任何编码；也可以打开前缀根地址，粘贴网址回车即走。

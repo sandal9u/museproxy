@@ -19,9 +19,9 @@ jobs:
           PX_KEY: ${{ secrets.PX_KEY }}
         run: |
           sleep 5
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.gorou-public.workers.dev/$PX_KEY/https://example.com/")
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px-nbfun.gorou-public.workers.dev/$PX_KEY/https://example.com/")
           echo "proxied example.com: $code"
           test "$code" = "200"
-          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.gorou-public.workers.dev/https://example.com/")
+          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px-nbfun.gorou-public.workers.dev/https://example.com/")
           echo "no-key request: $code2"
           test "$code2" = "404"

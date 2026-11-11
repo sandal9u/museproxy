@@ -1,5 +1,5 @@
 // px — 极简网页代理
-// 用法: https://px.gorou-public.workers.dev/<KEY>/https://目标网址
+// 用法: https://px-nbfun.gorou-public.workers.dev/<KEY>/https://目标网址
 // 代理前缀后面直接跟原始网址，不编码。无 KEY 一律 404，不做开放代理。
 // 授权码不写在代码里：部署时由 Actions Secret PX_KEY 注入为 Worker Secret（env.PX_KEY）。
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";

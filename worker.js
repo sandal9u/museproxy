@@ -1,7 +1,7 @@
 // px — 极简网页代理（Worker 名 px-nbfun，域名 px.nbfun.com，HTTP 网页代理）
 // 对外伪装：根路径与一切无关路径一律返回 nginx 默认欢迎页；robots.txt 全站禁止爬虫。
 // 真正入口：https://px.nbfun.com/https/example.com/路径 —— /https（或 /http）后跟不带协议符号的裸网址。
-// 授权：未授权访问入口路径先见授权码表单，填对授权码种 30 天 Cookie 后直达；授权码存 Worker Secret（env.PX_KEY），不入代码。
+// 授权：全站无表单、无弹窗——浏览器靠带 pxk 参数的解锁链接（GET 一次种 30 天 Cookie），控制台靠请求头/pxk；未授权只见伪装页。授权码存 Worker Secret（env.PX_KEY），不入代码。
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const ROBOTS_TAG = "noindex, nofollow, noarchive";
 
@@ -57,27 +57,12 @@ function proxyPath(abs) {
   return "/" + abs.slice(0, i) + "/" + abs.slice(i + 3);
 }
 
-function unlockPage(next) {
-  const esc = next.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorization</title>
-<body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
-<form method="POST" action="/auth">
-<input type="hidden" name="next" value="${esc}">
-<input type="text" name="code" placeholder="授权码" autocomplete="off" autofocus
- style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<button type="submit" style="width:100%;margin-top:10px;padding:12px;font-size:16px;border:0;border-radius:8px;background:#222;color:#fff">OK</button>
-</form>`;
-  return new Response(page, {
-    headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
-  });
-}
-
 function inputPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
-<form id="f"><input id="u" type="text" placeholder="https://example.com" autocomplete="off"
- style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px"></form>
-<script>document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();var v=document.getElementById('u').value.trim();if(!v)return;var m=v.match(/^(https?):\\/\\/(.+)$/i);if(m){location.href='/'+m[1].toLowerCase()+'/'+m[2];}else{location.href='/https/'+v;}});</script>`;
+<input id="u" type="text" placeholder="https://example.com" autocomplete="off"
+ style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
+<script>var u=document.getElementById('u');u.focus();u.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=u.value.trim();if(!v)return;var m=v.match(/^(https?):\\/\\/(.+)$/i);if(m){location.href='/'+m[1].toLowerCase()+'/'+m[2];}else{location.href='/https/'+v;}});</script>`;
   return new Response(page, {
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
   });
@@ -113,35 +98,26 @@ export default {
       });
     }
 
-    // 授权码提交端点：对码 → 种 Cookie → 跳回原目标；错码 → 回解锁页
-    if (path === "/auth") {
-      if (request.method !== "POST") return decoy();
-      const form = new URLSearchParams(await request.text());
-      const next = form.get("next") || "/https/";
-      if (!/^\/(https?)(\/|$)/i.test(next)) return decoy();
-      if (form.get("code") === KEY) {
-        const resp = new Response(null, { status: 302, headers: { Location: next } });
-        resp.headers.append("Set-Cookie", authCookie(KEY));
-        return resp;
-      }
-      return unlockPage(next);
-    }
-
-    // 入口判定：/https/<裸网址> 或 /http/<裸网址>
+    // 入口判定：/https/<裸网址> 或 /http/<裸网址>；全站无表单、无 POST 解锁，未授权只见伪装页
     const entry = path.match(/^\/(https?)(\/(.*))?$/i);
     if (!entry) return decoy();
     const scheme = entry[1].toLowerCase();
     const rest = entry[3] || "";
 
-    // pxk 是我方授权参数：验完即从转发给目标站的查询串里摘掉，目标站看不见
+    // pxk 是我方授权参数：验完即从转发给目标站的查询串里摘掉，目标站看不见；验过同时种 Cookie
     const params = new URLSearchParams(url.search);
     const pxk = params.get("pxk");
     if (pxk !== null) params.delete("pxk");
     const rest2 = params.toString();
     const fwdSearch = rest2 ? "?" + rest2 : "";
+    const plantCookie = pxk !== null && pxk === KEY;
 
-    if (!authed(request, KEY, pxk)) return unlockPage(path + url.search);
-    if (!rest) return inputPage();
+    if (!authed(request, KEY, pxk)) return decoy();
+    if (!rest) {
+      const page = inputPage();
+      if (plantCookie) page.headers.append("Set-Cookie", authCookie(KEY));
+      return page;
+    }
 
     let turl;
     try { turl = new URL(scheme + "://" + rest + fwdSearch); } catch { return decoy(); }
@@ -197,6 +173,7 @@ export default {
       if (!hasSecure) parts.push("Secure");
       out.append("Set-Cookie", parts.join("; "));
     }
+    if (plantCookie) out.append("Set-Cookie", authCookie(KEY));
 
     const ct = resp.headers.get("Content-Type") || "";
     if (ct.includes("text/html")) {

@@ -1,3 +1,3 @@
-# px 代理（一句话版）
-
-浏览器抓取走 px 代理（https://px.nbfun.com/https/<网址>），密码存在密码箱里，用时拉起密码箱输入框取用。
+浏览器：打开 https://px.nbfun.com/https/<目标网址> 经代理抓取。
+输 key：需要授权码时，拉起安全保险库里 px 的录入卡让用户输入，不要让用户在聊天里发明文。
+控制台：从安全保险库的 px 取 key，以请求头 X-Px-Key 调用，例如 curl -H "X-Px-Key: <key>" "https://px.nbfun.com/https/example.com/"。

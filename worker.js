@@ -86,9 +86,12 @@ function keyPage() {
 function inputPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
+<textarea id="p" rows="5" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;cursor:pointer">${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
+<div id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:4px 0 10px"></div>
 <input id="u" type="text" placeholder="https://example.com" autocomplete="off"
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<script>var u=document.getElementById('u');u.focus();u.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=u.value.trim();if(!v)return;var m=v.match(/^(https?):\\/\\/(.+)$/i);if(m){location.href='/'+m[1].toLowerCase()+'/'+m[2];}else{location.href='/https/'+v;}});</script>`;
+<script>var p=document.getElementById('p');p.addEventListener('click',function(){function ok(){var d=document.getElementById('done');d.textContent='已复制';setTimeout(function(){d.textContent='';},2000);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p.value).then(ok,function(){p.select();document.execCommand('copy');ok();});}else{p.select();document.execCommand('copy');ok();}});
+var u=document.getElementById('u');u.focus();u.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=u.value.trim();if(!v)return;var m=v.match(/^(https?):\\/\\/(.+)$/i);if(m){location.href='/'+m[1].toLowerCase()+'/'+m[2];}else{location.href='/https/'+v;}});</script>`;
   return new Response(page, {
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
   });
@@ -117,56 +120,12 @@ const PROMPT_TEXT = [
   "控制台：从安全保险库的 px 取 key，以请求头 X-Px-Key 调用，例如 curl -H \"X-Px-Key: <key>\" \"https://px.nbfun.com/https/example.com/\"。"
 ].join("\n");
 
-const PROMPT_PAGE = `<!doctype html>
-<html lang="zh">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex,nofollow,noarchive">
-<title>px 代理提示词</title>
-<style>
-body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f7f3ea;color:#222;margin:0;padding:32px 16px}
-main{max-width:720px;margin:0 auto}
-p.hint{font-size:17px;margin:0 0 12px}
-textarea{width:100%;box-sizing:border-box;font:14px/1.7 ui-monospace,Menlo,Consolas,monospace;padding:14px;border:1px solid #c9c2b2;border-radius:10px;background:#fff;resize:none;cursor:pointer}
-p.done{color:#1a7f37;font-size:14px;height:20px;margin:8px 0 0}
-</style>
-</head>
-<body>
-<main>
-<p class="hint" id="hint">点击复制，粘贴到自己的个人代理里面</p>
-<textarea id="t" rows="5" readonly>${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
-<p class="done" id="done"></p>
-</main>
-<script>
-var t = document.getElementById('t');
-var TEXT = t.value;
-t.addEventListener('click', function () {
-  function ok() {
-    var d = document.getElementById('done');
-    d.textContent = '已复制';
-    setTimeout(function () { d.textContent = ''; }, 2000);
-  }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(TEXT).then(ok, function () { t.select(); document.execCommand('copy'); ok(); });
-  } else { t.select(); document.execCommand('copy'); ok(); }
-});
-</script>
-</body>
-</html>`;
-
 export default {
   async fetch(request, env) {
     const KEY = env.PX_KEY;
     if (!KEY) return new Response("not configured", { status: 500 });
     const url = new URL(request.url);
     const path = url.pathname;
-
-    if (path === "/prompt") {
-      return new Response(PROMPT_PAGE, {
-        headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
-      });
-    }
 
     if (path === "/robots.txt") {
       return new Response("User-agent: *\nDisallow: /\n", {

@@ -1,0 +1,9 @@
+{
+  "name": "px-nbfun",
+  "main": "worker.js",
+  "compatibility_date": "2025-06-01",
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "px.nbfun.com", "custom_domain": true }
+  ]
+}

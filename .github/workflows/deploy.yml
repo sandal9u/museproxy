@@ -17,10 +17,7 @@ jobs:
           PX_ZONE: nbfun.com
         run: python3 deploy.py
       - name: Smoke check
-        env:
-          PX_KEY: ${{ secrets.PX_KEY }}
         run: |
-          jar=$(mktemp)
           for i in $(seq 1 12); do
             page=$(curl -s --max-time 30 "https://px.nbfun.com/https/example.com/")
             echo "$page" | grep -q "Welcome to nginx" && { echo "try $i: unauthed entry sees decoy OK"; break; }
@@ -28,10 +25,6 @@ jobs:
           done
           echo "$page" | grep -q "Welcome to nginx"
           curl -s -H "Accept: text/html" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q 'id="k"' && echo "browser unauthed sees key box OK"
-          curl -s -c "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/?pxk=$PX_KEY" | grep -q "Example Domain" && echo "pxk unlock + proxied example.com OK"
-          curl -s -b "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "planted cookie works OK"
-          curl -s -H "X-Px-Key: $PX_KEY" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "header auth OK"
           root=$(curl -s --max-time 30 "https://px.nbfun.com/")
           echo "$root" | grep -q "Welcome to nginx" && echo "root decoy OK"
           curl -s --max-time 30 "https://px.nbfun.com/robots.txt" | grep -q "Disallow: /" && echo "robots OK"
-          rm -f "$jar"

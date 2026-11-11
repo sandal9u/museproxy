@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """px 部署：Cloudflare API 直传（multipart PUT），不走 wrangler。
-需要环境变量 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / PX_KEY（GitHub Actions Secrets 注入）。
-部署后开启 workers.dev 子域名入口、把 PX_KEY 写入 Worker Secret，并打印访问地址。"""
+需要环境变量 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN（GitHub Actions Secrets 注入）。
+授权码 PX_KEY 以 Cloudflare 面板为准：部署不覆盖已有值；仅当 Worker 上缺这条机密时，
+才用环境变量 PX_KEY 作引导值写入一次，并打印访问地址。"""
 import io
 import json
 import os
@@ -45,10 +46,17 @@ def main():
                json.dumps({"enabled": True}).encode("utf-8"))
     print("workers.dev enabled:", sub.get("success"))
 
-    secret = {"name": "PX_KEY", "type": "secret_text", "text": os.environ["PX_KEY"]}
-    sres = call("PUT", f"/accounts/{ACCT}/workers/scripts/{SCRIPT}/secrets",
-                json.dumps(secret).encode("utf-8"))
-    print("secret PX_KEY set:", sres.get("success"))
+    existing = call("GET", f"/accounts/{ACCT}/workers/scripts/{SCRIPT}/secrets")
+    names = [s.get("name") for s in existing.get("result", [])]
+    if "PX_KEY" in names:
+        print("secret PX_KEY: kept (dashboard is source of truth)")
+    elif os.environ.get("PX_KEY"):
+        secret = {"name": "PX_KEY", "type": "secret_text", "text": os.environ["PX_KEY"]}
+        sres = call("PUT", f"/accounts/{ACCT}/workers/scripts/{SCRIPT}/secrets",
+                    json.dumps(secret).encode("utf-8"))
+        print("secret PX_KEY set (bootstrap):", sres.get("success"))
+    else:
+        print("secret PX_KEY: MISSING and no bootstrap value provided")
 
     host = os.environ.get("PX_HOSTNAME")
     if host:

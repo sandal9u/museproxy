@@ -1,11 +1,12 @@
 # px — 极简网页代理
 
-独立 Cloudflare Worker，部署在 Datumoj 账户（与 nbfun 生产站分开额度池）。
+独立 Cloudflare Worker `px-nbfun`，部署在 nbfun 账户，自定义域名 px.nbfun.com（用户指定的子域名例外）。
+一切变更只走本仓库的 GitHub Actions 部署，不手工操作 Worker。
 
 ## 用法
 
 ```
-https://px-nbfun.gorou-public.workers.dev/<KEY>/https://目标网址
+https://px.nbfun.com/<KEY>/https://目标网址
 ```
 
 代理前缀后面直接跟原始网址，不做任何编码；也可以打开前缀根地址，粘贴网址回车即走。
@@ -22,9 +23,10 @@ https://px-nbfun.gorou-public.workers.dev/<KEY>/https://目标网址
 ## 部署
 
 push main 即由 GitHub Actions 跑 `deploy.py`（Cloudflare API 直传，不走 wrangler），
-Secrets：`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`（Datumoj 账户）。
+Secrets：`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`（nbfun 账户）、`PX_KEY`。
+部署脚本同时绑定自定义域名 px.nbfun.com（Workers Domains API）。
 
 ## 额度
 
-Workers 免费版 10 万次请求/日是账户级共池（00:00 UTC 重置），本 Worker 与 datumoj.com
-同账户；个人浏览量级（数百至数千次/日）不构成压力，如当日池子异常先查账户用量再说。
+Workers 免费版 10 万次请求/日是账户级共池（00:00 UTC 重置），本 Worker 与 nbfun.com
+同账户共池；个人浏览量级（数百至数千次/日）不构成压力，如当日池子异常先查账户用量再说。

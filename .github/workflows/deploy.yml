@@ -13,15 +13,20 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PX_KEY: ${{ secrets.PX_KEY }}
+          PX_HOSTNAME: px.nbfun.com
+          PX_ZONE: nbfun.com
         run: python3 deploy.py
       - name: Smoke check
         env:
           PX_KEY: ${{ secrets.PX_KEY }}
         run: |
-          sleep 5
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px-nbfun.gorou-public.workers.dev/$PX_KEY/https://example.com/")
-          echo "proxied example.com: $code"
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.nbfun.com/$PX_KEY/https://example.com/")
+            echo "try $i proxied example.com via px.nbfun.com: $code"
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
           test "$code" = "200"
-          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px-nbfun.gorou-public.workers.dev/https://example.com/")
+          code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.nbfun.com/https://example.com/")
           echo "no-key request: $code2"
           test "$code2" = "404"

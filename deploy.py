@@ -50,6 +50,13 @@ def main():
                 json.dumps(secret).encode("utf-8"))
     print("secret PX_KEY set:", sres.get("success"))
 
+    host = os.environ.get("PX_HOSTNAME")
+    if host:
+        dres = call("PUT", f"/accounts/{ACCT}/workers/domains",
+                    json.dumps({"hostname": host, "service": SCRIPT,
+                                "zone_name": os.environ.get("PX_ZONE", "")}).encode("utf-8"))
+        print("custom domain:", host, dres.get("success"))
+
     info = call("GET", f"/accounts/{ACCT}/workers/subdomain")
     print("address: https://%s.%s.workers.dev/" % (SCRIPT, info["result"]["subdomain"]))
 

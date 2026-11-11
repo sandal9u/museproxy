@@ -1,7 +1,7 @@
 // px — 极简网页代理（Worker 名 px-nbfun，域名 px.nbfun.com，HTTP 网页代理）
 // 对外伪装：根路径与一切无关路径一律返回 nginx 默认欢迎页；robots.txt 全站禁止爬虫。
 // 真正入口：https://px.nbfun.com/https/example.com/路径 —— /https（或 /http）后跟不带协议符号的裸网址。
-// 授权：全站无表单、无弹窗——浏览器靠带 pxk 参数的解锁链接（GET 一次种 30 天 Cookie），控制台靠请求头/pxk；未授权只见伪装页。授权码存 Worker Secret（env.PX_KEY），不入代码。
+// 授权：全站无表单、无弹窗、无校验端点——浏览器在入口页的框里输码（拼进地址重开，对了种 Cookie 并跳到干净地址，错了还是同一个框，无从穷举）；控制台靠请求头/pxk。授权码存 Worker Secret（env.PX_KEY），不入代码。
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const ROBOTS_TAG = "noindex, nofollow, noarchive";
 
@@ -57,6 +57,19 @@ function proxyPath(abs) {
   return "/" + abs.slice(0, i) + "/" + abs.slice(i + 3);
 }
 
+// 入口页上的输码框：不设校验端点、不回对错——输的内容只是拼进本页地址重新打开，
+// 对了服务端种 Cookie 并 302 到去掉参数的干净地址，对错看到的都是这同一个框，无法当穷举神谕用。
+function keyPage() {
+  const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
+<body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
+<input id="k" type="text" autocomplete="off" autofocus
+ style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
+<script>var k=document.getElementById('k');k.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/&$/,'');var sep=q?'&':'?';location.href=location.pathname+q+sep+'pxk='+encodeURIComponent(v);});</script>`;
+  return new Response(page, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
+  });
+}
+
 function inputPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
@@ -104,15 +117,27 @@ export default {
     const scheme = entry[1].toLowerCase();
     const rest = entry[3] || "";
 
-    // pxk 是我方授权参数：验完即从转发给目标站的查询串里摘掉，目标站看不见；验过同时种 Cookie
+    // pxk 是我方授权参数：验完即从转发给目标站的查询串里摘掉，目标站看不见
     const params = new URLSearchParams(url.search);
     const pxk = params.get("pxk");
     if (pxk !== null) params.delete("pxk");
     const rest2 = params.toString();
     const fwdSearch = rest2 ? "?" + rest2 : "";
     const plantCookie = pxk !== null && pxk === KEY;
+    const isBrowser = (request.headers.get("Accept") || "").includes("text/html");
 
-    if (!authed(request, KEY, pxk)) return decoy();
+    if (pxk !== null && isBrowser) {
+      if (plantCookie) {
+        const resp = new Response(null, {
+          status: 302,
+          headers: { Location: path + fwdSearch, "X-Robots-Tag": ROBOTS_TAG },
+        });
+        resp.headers.append("Set-Cookie", authCookie(KEY));
+        return resp;
+      }
+      return keyPage();
+    }
+    if (!authed(request, KEY, pxk)) return isBrowser ? keyPage() : decoy();
     if (!rest) {
       const page = inputPage();
       if (plantCookie) page.headers.append("Set-Cookie", authCookie(KEY));

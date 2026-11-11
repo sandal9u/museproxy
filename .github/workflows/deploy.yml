@@ -27,6 +27,7 @@ jobs:
             echo "try $i: waiting for new deployment"; sleep 10
           done
           echo "$page" | grep -q "Welcome to nginx"
+          curl -s -H "Accept: text/html" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q 'id="k"' && echo "browser unauthed sees key box OK"
           curl -s -c "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/?pxk=$PX_KEY" | grep -q "Example Domain" && echo "pxk unlock + proxied example.com OK"
           curl -s -b "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "planted cookie works OK"
           curl -s -H "X-Px-Key: $PX_KEY" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "header auth OK"

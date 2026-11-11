@@ -5,5 +5,11 @@
   "workers_dev": true,
   "routes": [
     { "pattern": "px.nbfun.com", "custom_domain": true }
-  ]
+  ],
+  "r2_buckets": [
+    { "binding": "PASTE", "bucket_name": "px-paste" }
+  ],
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  }
 }

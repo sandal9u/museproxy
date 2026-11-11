@@ -127,12 +127,184 @@ const promptText = (host) => [
   "控制台：从安全保险库的 px 取 key，以请求头 X-Px-Key 调用，例如 curl -H \"X-Px-Key: <key>\" \"https://" + host + "/https/example.com/\"。"
 ].join("\n");
 
+// ===== /paste 临时中转站 =====
+// R2 存储、单一目录列表式呈现；每个文件按自身上传时间起 30 分钟销毁（定时扫除＋读取时惰性过期）。
+// 防滥用三层：复用 px 授权码把门；站内硬顶（件数／总量／单文件）截断洪水；清理只管正常周转。
+const PASTE_TTL_MS = 30 * 60 * 1000;
+const PASTE_MAX_FILES = 200;
+const PASTE_MAX_TOTAL = 1024 * 1024 * 1024;
+const PASTE_MAX_FILE = 100 * 1024 * 1024;
+
+const escHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const humanSize = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B");
+const pasteAge = (o) => Date.now() - new Date(o.uploaded).getTime();
+const pasteRemainMin = (o) => Math.max(0, Math.ceil((PASTE_TTL_MS - pasteAge(o)) / 60000));
+const pasteExpired = (o) => pasteAge(o) > PASTE_TTL_MS;
+const htmlResp = (html, status = 200) => new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
+const jsonResp = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "X-Robots-Tag": ROBOTS_TAG } });
+
+function sanitizeName(name) {
+  const s = String(name || "").split(/[\\/]/).pop().replace(/[\x00-\x1f\x7f?#%<>"|]/g, "_").trim().slice(0, 100);
+  return s || "file";
+}
+function randCode() {
+  const a = "abcdefghjkmnpqrstuvwxyz23456789";
+  const b = new Uint8Array(6);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => a[x % a.length]).join("");
+}
+async function listAllPaste(env) {
+  const out = [];
+  let cursor;
+  do {
+    const r = await env.PASTE.list({ limit: 1000, cursor, include: ["customMetadata"] });
+    out.push(...r.objects);
+    cursor = r.truncated ? r.cursor : undefined;
+  } while (cursor);
+  return out;
+}
+async function uniquePasteName(env, orig) {
+  for (let i = 0; i < 5; i++) {
+    const cand = randCode() + "-" + orig;
+    if (!(await env.PASTE.head(cand))) return cand;
+  }
+  return randCode() + randCode() + "-" + orig;
+}
+
+function pastePage(objs) {
+  const rows = objs.map((o) =>
+    '<div class="row"><a class="nm" href="/paste/' + encodeURIComponent(o.key) + '">' + escHtml(o.key) +
+    '</a><span class="sz">' + humanSize(o.size) + '</span><span class="rm">剩 ' + pasteRemainMin(o) +
+    ' 分钟</span><button class="del" data-k="' + escHtml(o.key) + '">删除</button></div>'
+  ).join("\n");
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste · 临时中转站</title>
+<body style="font-family:system-ui;max-width:720px;margin:6vh auto;padding:0 16px;background:#f7f3ea;color:#222">
+<h1 style="font-size:20px;margin:0 0 4px">临时中转站</h1>
+<p style="color:#666;font-size:13px;margin:0 0 16px">每个文件按上传时间起 30 分钟自动销毁 · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
+<textarea id="t" rows="4" placeholder="粘贴文本到这里" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9c2b2;border-radius:8px"></textarea>
+<div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap"><input id="n" type="text" placeholder="文本文件名（可空）" style="flex:1;min-width:140px;padding:9px;border:1px solid #bbb;border-radius:8px"><button id="bt" style="padding:9px 16px">存文本</button></div>
+<div style="margin:8px 0 16px;display:flex;gap:8px;flex-wrap:wrap"><input id="f" type="file" style="flex:1;min-width:180px"><button id="bf" style="padding:9px 16px">传文件</button></div>
+<p id="msg" style="color:#b00;font-size:14px;min-height:20px;margin:0 0 8px"></p>
+${rows || '<p style="color:#888">目录是空的。</p>'}
+<style>.row{display:flex;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid #ddd}.nm{flex:1;word-break:break-all}.sz,.rm{color:#666;font-size:13px;white-space:nowrap}.del{white-space:nowrap}</style>
+<script>
+var msg = document.getElementById('msg');
+function send(fd) { fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
+document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
+document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
+document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('click', function () { fetch('/paste/' + encodeURIComponent(b.getAttribute('data-k')), { method: 'DELETE' }).then(function () { location.reload(); }); }); });
+</script>`;
+}
+
+function pasteTextPage(key, text, o) {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(key)}</title>
+<body style="font-family:system-ui;max-width:720px;margin:6vh auto;padding:0 16px;background:#f7f3ea;color:#222">
+<p style="color:#666;font-size:13px;margin:0 0 8px">${escHtml(key)} · ${humanSize(o.size)} · 剩 ${pasteRemainMin(o)} 分钟销毁</p>
+<textarea id="t" rows="12" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#fff;resize:none;overflow:hidden;cursor:pointer">${escHtml(text)}</textarea>
+<p id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:6px 0"></p>
+<p style="font-size:14px"><a href="/paste/${encodeURIComponent(key)}?dl=1">下载</a> · <a href="/paste">返回目录</a></p>
+<script>
+var t = document.getElementById('t');
+function fit() { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+fit(); window.addEventListener('resize', fit);
+t.addEventListener('click', function () { function ok() { var d = document.getElementById('done'); d.textContent = '已复制'; setTimeout(function () { d.textContent = ''; }, 2000); } if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t.value).then(ok, function () { t.select(); document.execCommand('copy'); ok(); }); } else { t.select(); document.execCommand('copy'); ok(); } });
+</script>`;
+}
+
+const gonePage = (m) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste</title><body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px;background:#f7f3ea;color:#222"><p>${escHtml(m)}</p><p><a href="/paste">返回目录</a></p>`;
+
+async function handlePaste(request, env, KEY, url, sub) {
+  const isBrowser = (request.headers.get("Accept") || "").includes("text/html");
+  const pxk = url.searchParams.get("pxk");
+  if (pxk !== null && isBrowser) {
+    if (request.headers.get("X-Px-Unlock") === "1") {
+      const resp = new Response(null, { status: 200, headers: { "X-Robots-Tag": ROBOTS_TAG } });
+      if (pxk === KEY) resp.headers.append("Set-Cookie", authCookie(KEY));
+      return resp;
+    }
+    if (pxk === KEY) {
+      const resp = new Response(null, { status: 302, headers: { Location: url.pathname, "X-Robots-Tag": ROBOTS_TAG } });
+      resp.headers.append("Set-Cookie", authCookie(KEY));
+      return resp;
+    }
+    return keyPage();
+  }
+  if (!authed(request, KEY, pxk)) return isBrowser ? keyPage() : decoy();
+
+  if (!sub) {
+    if (request.method === "GET") {
+      const objs = (await listAllPaste(env)).sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
+      return htmlResp(pastePage(objs));
+    }
+    if (request.method === "POST") {
+      let fd;
+      try { fd = await request.formData(); } catch { return jsonResp({ error: "需要 multipart 上传" }, 400); }
+      const file = fd.get("file");
+      const text = fd.get("text");
+      let body, origName, kind, ctype, size;
+      if (file && typeof file === "object" && file.name) {
+        size = file.size;
+        if (size > PASTE_MAX_FILE) return jsonResp({ error: "单个文件不能超过 100 MB" }, 413);
+        body = file; origName = sanitizeName(file.name); kind = "file";
+        ctype = file.type || "application/octet-stream";
+      } else if (typeof text === "string" && text.length > 0) {
+        size = new TextEncoder().encode(text).length;
+        if (size > PASTE_MAX_FILE) return jsonResp({ error: "文本不能超过 100 MB" }, 413);
+        let nm = sanitizeName(String(fd.get("name") || ""));
+        if (!fd.get("name")) nm = "文本.txt";
+        else if (!nm.includes(".")) nm += ".txt";
+        body = text; origName = nm; kind = "text"; ctype = "text/plain; charset=utf-8";
+      } else {
+        return jsonResp({ error: "没有内容" }, 400);
+      }
+      const objs = await listAllPaste(env);
+      if (objs.length >= PASTE_MAX_FILES) return jsonResp({ error: "站内文件已满（200 个），等过期后再传" }, 429);
+      const total = objs.reduce((s, o) => s + o.size, 0);
+      if (total + size > PASTE_MAX_TOTAL) return jsonResp({ error: "站内总量已满（1 GB）" }, 429);
+      const stored = await uniquePasteName(env, origName);
+      await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: origName } });
+      return jsonResp({ ok: true, name: stored });
+    }
+    return new Response("method not allowed", { status: 405 });
+  }
+
+  if (request.method === "DELETE") {
+    await env.PASTE.delete(sub);
+    return jsonResp({ ok: true });
+  }
+  if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
+  const obj = await env.PASTE.get(sub);
+  if (!obj) return htmlResp(gonePage("文件不存在或已被清除"), 404);
+  if (pasteExpired(obj)) {
+    await env.PASTE.delete(sub);
+    return htmlResp(gonePage("文件已过期，已清除"), 410);
+  }
+  const kind = (obj.customMetadata && obj.customMetadata.kind) || "file";
+  const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^[a-z0-9]+-/, "");
+  if (kind === "text" && !url.searchParams.has("dl")) {
+    return htmlResp(pasteTextPage(sub, await obj.text(), obj));
+  }
+  const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });
+  obj.writeHttpMetadata(headers);
+  if (!headers.get("Content-Type")) headers.set("Content-Type", "application/octet-stream");
+  headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(orig));
+  return new Response(obj.body, { headers });
+}
+
 export default {
   async fetch(request, env) {
     const KEY = env.PX_KEY;
     if (!KEY) return new Response("not configured", { status: 500 });
     const url = new URL(request.url);
     const path = url.pathname;
+
+    const pasteMatch = path.match(/^\/paste(?:\/(.*))?$/);
+    if (pasteMatch) {
+      if (!env.PASTE) return new Response("paste not configured", { status: 500 });
+      let sub = "";
+      try { sub = decodeURIComponent(pasteMatch[1] || ""); } catch { sub = ""; }
+      return handlePaste(request, env, KEY, url, sub);
+    }
 
     if (path === "/robots.txt") {
       return new Response("User-agent: *\nDisallow: /\n", {
@@ -243,5 +415,16 @@ export default {
       return new Response(html, { status: resp.status, headers: out });
     }
     return new Response(resp.body, { status: resp.status, headers: out });
+  },
+
+  // 定时扫除（唯一的定时器）：每 10 分钟醒一次，只删上传已满 30 分钟的文件
+  async scheduled(event, env, ctx) {
+    if (!env.PASTE) return;
+    const objs = await listAllPaste(env);
+    const expired = objs.filter(pasteExpired).map((o) => o.key);
+    for (let i = 0; i < expired.length; i += 1000) {
+      await env.PASTE.delete(expired.slice(i, i + 1000));
+    }
+    if (expired.length) console.log("paste sweep: deleted " + expired.length);
   },
 };

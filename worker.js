@@ -79,7 +79,7 @@ function proxyPath(abs) {
 function keyPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
-<input id="k" type="text" autocomplete="off" autofocus
+<input id="k" type="text" placeholder="请输入key" autocomplete="off" autofocus
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
 <script>var k=document.getElementById('k');k.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/[?&]$/,'');var sep=q?'&':'?';fetch(location.pathname+q+sep+'pxk='+encodeURIComponent(v),{headers:{'X-Px-Unlock':'1','Accept':'text/html'}}).then(function(){location.replace(location.pathname+q);},function(){location.replace(location.pathname+q);});});</script>`;
   return new Response(page, {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """px 部署：Cloudflare API 直传（multipart PUT），不走 wrangler。
-需要环境变量 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN（GitHub Actions Secrets 注入）。
-部署后开启 workers.dev 子域名入口，并打印访问地址。"""
+需要环境变量 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / PX_KEY（GitHub Actions Secrets 注入）。
+部署后开启 workers.dev 子域名入口、把 PX_KEY 写入 Worker Secret，并打印访问地址。"""
 import io
 import json
 import os
@@ -44,6 +44,11 @@ def main():
     sub = call("POST", f"/accounts/{ACCT}/workers/scripts/{SCRIPT}/subdomain",
                json.dumps({"enabled": True}).encode("utf-8"))
     print("workers.dev enabled:", sub.get("success"))
+
+    secret = {"name": "PX_KEY", "type": "secret_text", "text": os.environ["PX_KEY"]}
+    sres = call("PUT", f"/accounts/{ACCT}/workers/scripts/{SCRIPT}/secrets",
+                json.dumps(secret).encode("utf-8"))
+    print("secret PX_KEY set:", sres.get("success"))
 
     info = call("GET", f"/accounts/{ACCT}/workers/subdomain")
     print("address: https://%s.%s.workers.dev/" % (SCRIPT, info["result"]["subdomain"]))

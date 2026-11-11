@@ -12,11 +12,14 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PX_KEY: ${{ secrets.PX_KEY }}
         run: python3 deploy.py
       - name: Smoke check
+        env:
+          PX_KEY: ${{ secrets.PX_KEY }}
         run: |
           sleep 5
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.gorou-public.workers.dev/9c1ed14954ce293b/https://example.com/")
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.gorou-public.workers.dev/$PX_KEY/https://example.com/")
           echo "proxied example.com: $code"
           test "$code" = "200"
           code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.gorou-public.workers.dev/https://example.com/")

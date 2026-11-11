@@ -1,8 +1,7 @@
 // px — 极简网页代理
 // 用法: https://px.gorou-public.workers.dev/<KEY>/https://目标网址
 // 代理前缀后面直接跟原始网址，不编码。无 KEY 一律 404，不做开放代理。
-const KEY = "9c1ed14954ce293b";
-const PREFIX = "/" + KEY + "/";
+// 授权码不写在代码里：部署时由 Actions Secret PX_KEY 注入为 Worker Secret（env.PX_KEY）。
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 function proxyUrl(abs, key) {
@@ -25,7 +24,10 @@ function rewriteHtml(html, turl, key) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
+    const KEY = env.PX_KEY;
+    if (!KEY) return new Response("not configured", { status: 500 });
+    const PREFIX = "/" + KEY + "/";
     const url = new URL(request.url);
 
     // 落地页：只有一个输入框，粘贴网址即走代理

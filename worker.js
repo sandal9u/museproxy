@@ -151,11 +151,24 @@ function sanitizeName(name) {
   const s = String(name || "").split(/[\\/]/).pop().replace(/[\x00-\x1f\x7f?#%<>"|]/g, "_").trim().slice(0, 100);
   return s || "file";
 }
-function randCode() {
-  const a = "abcdefghjkmnpqrstuvwxyz23456789";
-  const b = new Uint8Array(4);
-  crypto.getRandomValues(b);
-  return [...b].map((x) => a[x % a.length]).join("");
+// 命名一律用 Unix 时间戳（秒）：文件为 <ts>-<原名>，自动命名的文本为 text-<ts>.md；撞名时 ts 递增
+async function tsFileName(env, orig) {
+  let ts = Math.floor(Date.now() / 1000);
+  for (let i = 0; i < 1000; i++) {
+    const cand = ts + "-" + orig;
+    if (!(await env.PASTE.head(cand))) return cand;
+    ts++;
+  }
+  return ts + "-" + orig;
+}
+async function tsTextName(env) {
+  let ts = Math.floor(Date.now() / 1000);
+  for (let i = 0; i < 1000; i++) {
+    const cand = "text-" + ts + ".md";
+    if (!(await env.PASTE.head(cand))) return cand;
+    ts++;
+  }
+  return "text-" + ts + ".md";
 }
 async function listAllPaste(env) {
   const out = [];
@@ -167,14 +180,6 @@ async function listAllPaste(env) {
   } while (cursor);
   return out;
 }
-async function uniquePasteName(env, orig) {
-  for (let i = 0; i < 5; i++) {
-    const cand = randCode() + "-" + orig;
-    if (!(await env.PASTE.head(cand))) return cand;
-  }
-  return randCode() + randCode() + "-" + orig;
-}
-
 function pastePage(objs) {
   const rows = objs.map((o) =>
     '<div class="row"><a class="nm" href="/paste/' + encodeURIComponent(o.key) + '">' + escHtml(o.key) +
@@ -239,21 +244,6 @@ document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('cli
 </script>`;
 }
 
-function pasteTextPage(key, text, o) {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(key)}</title>
-<body style="font-family:system-ui;max-width:720px;margin:6vh auto;padding:0 16px;background:#f7f3ea;color:#222">
-<p style="color:#666;font-size:13px;margin:0 0 8px">${escHtml(key)} · ${humanSize(o.size)} · 剩 ${pasteRemainMin(o)} 分钟销毁</p>
-<textarea id="t" rows="12" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#fff;resize:none;overflow:hidden;cursor:pointer">${escHtml(text)}</textarea>
-<p id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:6px 0"></p>
-<p style="font-size:14px"><a href="/paste/${encodeURIComponent(key)}?dl=1">下载</a> · <a href="/paste">返回目录</a></p>
-<script>
-var t = document.getElementById('t');
-function fit() { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
-fit(); window.addEventListener('resize', fit);
-t.addEventListener('click', function () { function ok() { var d = document.getElementById('done'); d.textContent = '已复制'; setTimeout(function () { d.textContent = ''; }, 2000); } if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t.value).then(ok, function () { t.select(); document.execCommand('copy'); ok(); }); } else { t.select(); document.execCommand('copy'); ok(); } });
-</script>`;
-}
-
 const gonePage = (m) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste</title><body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px;background:#f7f3ea;color:#222"><p>${escHtml(m)}</p><p><a href="/paste">返回目录</a></p>`;
 
 async function handlePaste(request, env, KEY, url, sub) {
@@ -284,7 +274,7 @@ async function handlePaste(request, env, KEY, url, sub) {
       try { fd = await request.formData(); } catch { return jsonResp({ error: "需要 multipart 上传" }, 400); }
       const file = fd.get("file");
       const text = fd.get("text");
-      let body, origName, kind, ctype, size;
+      let body, origName, kind, ctype, size, autoText = false;
       if (file && typeof file === "object" && file.name) {
         size = file.size;
         if (size > PASTE_MAX_FILE) return jsonResp({ error: "单个文件不能超过 100 MB" }, 413);
@@ -294,9 +284,9 @@ async function handlePaste(request, env, KEY, url, sub) {
         size = new TextEncoder().encode(text).length;
         if (size > PASTE_MAX_FILE) return jsonResp({ error: "文本不能超过 100 MB" }, 413);
         let nm = sanitizeName(String(fd.get("name") || ""));
-        if (!fd.get("name")) nm = "note.txt";
-        else if (!nm.includes(".")) nm += ".txt";
-        body = text; origName = nm; kind = "text"; ctype = "text/plain; charset=utf-8";
+        if (fd.get("name") && !nm.includes(".")) nm += ".md";
+        autoText = !fd.get("name");
+        body = text; origName = nm; kind = "text"; ctype = "text/markdown; charset=utf-8";
       } else {
         return jsonResp({ error: "没有内容" }, 400);
       }
@@ -304,7 +294,8 @@ async function handlePaste(request, env, KEY, url, sub) {
       if (objs.length >= PASTE_MAX_FILES) return jsonResp({ error: "站内文件已满（200 个），等过期后再传" }, 429);
       const total = objs.reduce((s, o) => s + o.size, 0);
       if (total + size > PASTE_MAX_TOTAL) return jsonResp({ error: "站内总量已满（1 GB）" }, 429);
-      const stored = await uniquePasteName(env, origName);
+      const stored = autoText ? await tsTextName(env) : await tsFileName(env, origName);
+      if (autoText) origName = stored;
       await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: origName } });
       return jsonResp({ ok: true, name: stored });
     }
@@ -320,7 +311,7 @@ async function handlePaste(request, env, KEY, url, sub) {
     const total = objs.reduce((s, o) => s + o.size, 0);
     if (total + buf.byteLength > PASTE_MAX_TOTAL) return textResp("站内总量已满（1 GB）\n", 429);
     const orig = sanitizeName(sub);
-    const stored = await uniquePasteName(env, orig);
+    const stored = await tsFileName(env, orig);
     const ctype = request.headers.get("Content-Type") || "application/octet-stream";
     const kind = ctype.startsWith("text/plain") ? "text" : "file";
     await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: orig } });
@@ -337,11 +328,8 @@ async function handlePaste(request, env, KEY, url, sub) {
     await env.PASTE.delete(sub);
     return htmlResp(gonePage("文件已过期，已清除"), 410);
   }
-  const kind = (obj.customMetadata && obj.customMetadata.kind) || "file";
-  const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^[a-z0-9]+-/, "");
-  if (kind === "text" && !url.searchParams.has("dl") && isBrowser) {
-    return htmlResp(pasteTextPage(sub, await obj.text(), obj));
-  }
+  // 不论文本还是文件，点击一律直接下载，不做任何解析呈现
+  const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^\d+-/, "");
   const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });
   obj.writeHttpMetadata(headers);
   if (!headers.get("Content-Type")) headers.set("Content-Type", "application/octet-stream");

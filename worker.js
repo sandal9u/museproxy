@@ -82,7 +82,7 @@ function keyPage() {
 <div style="display:flex;gap:8px">
 <input id="k" type="text" placeholder="请输入key" autocomplete="off" autofocus
  style="flex:1;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<button id="b" style="padding:12px 18px;font-size:16px;border:1px solid #bbb;border-radius:8px;background:#fff">确认</button>
+<button id="b" title="确认" aria-label="确认" style="padding:12px 16px;border:1px solid #bbb;border-radius:8px;background:#fff;color:#26241f;display:flex;align-items:center;cursor:pointer">${ICON.check}</button>
 </div>
 <script>var k=document.getElementById('k');function go(){var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/[?&]$/,'');var sep=q?'&':'?';fetch(location.pathname+q+sep+'pxk='+encodeURIComponent(v),{headers:{'X-Px-Unlock':'1','Accept':'text/html'}}).then(function(){location.replace(location.pathname+q);},function(){location.replace(location.pathname+q);});}k.addEventListener('keydown',function(e){if(e.key==='Enter')go();});document.getElementById('b').addEventListener('click',go);</script>`;
   return new Response(page, {
@@ -145,6 +145,15 @@ const pasteRemainMin = (o) => Math.max(0, Math.ceil((PASTE_TTL_MS - pasteAge(o))
 const pasteExpired = (o) => pasteAge(o) > PASTE_TTL_MS;
 const htmlResp = (html, status = 200) => new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
 const jsonResp = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "X-Robots-Tag": ROBOTS_TAG } });
+// 界面图标（内联 SVG，描边随按钮文字色）：check 确认 / filePlus 存文本 / upload 传文件 / cloud 选文件 / trash 删除
+const svgIcon = (inner, size) => '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block">' + inner + '</svg>';
+const ICON = {
+  check: svgIcon('<path d="M20 6L9 17l-5-5"/>', 20),
+  filePlus: svgIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>', 20),
+  upload: svgIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>', 20),
+  cloud: svgIcon('<path d="M16 16l-4-4-4 4"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>', 34),
+  trash: svgIcon('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>', 16),
+};
 const textResp = (s, status = 200) => new Response(s, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
 
 function sanitizeName(name) {
@@ -184,7 +193,7 @@ function pastePage(objs) {
   const rows = objs.map((o) =>
     '<div class="row"><a class="nm" href="/paste/' + encodeURIComponent(o.key) + '">' + escHtml(o.key) +
     '</a><span class="meta">' + humanSize(o.size) + ' · 剩 ' + pasteRemainMin(o) +
-    ' 分钟</span><button class="del" data-k="' + escHtml(o.key) + '">删除</button></div>'
+    ' 分钟</span><button class="del" data-k="' + escHtml(o.key) + '" title="删除" aria-label="删除">' + ICON.trash + '</button></div>'
   ).join("\n");
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste · 临时中转站</title>
 <body>
@@ -193,10 +202,10 @@ function pastePage(objs) {
 <p class="sub">每个文件按上传时间起 30 分钟自动销毁 · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
 <div class="card">
 <textarea id="t" rows="4" placeholder="粘贴文本到这里"></textarea>
-<div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn">存文本</button></div>
-<div id="dz"><span id="fn">点这里选文件，或把文件拖进来</span></div>
+<div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn" title="存文本" aria-label="存文本">${ICON.filePlus}</button></div>
+<div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span></div>
 <input id="f" type="file" hidden>
-<div class="line" style="justify-content:flex-end"><button id="bf" class="btn">传文件</button></div>
+<div class="line" style="justify-content:flex-end"><button id="bf" class="btn" title="传文件" aria-label="传文件">${ICON.upload}</button></div>
 <p id="msg"></p>
 </div>
 <div class="card">
@@ -214,9 +223,10 @@ textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10p
 textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
 .line{display:flex;gap:8px;margin-top:10px}
 .line input[type=text]{flex:1;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;min-width:0}
-.btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center}
 .btn:active{opacity:.75}
-#dz{margin-top:14px;border:1.5px dashed #cfc5a6;border-radius:10px;padding:20px 12px;text-align:center;color:#8a8378;font-size:14px;background:#fffdf7;cursor:pointer}
+#dz{margin-top:14px;border:1.5px dashed #cfc5a6;border-radius:10px;padding:18px 12px;text-align:center;color:#8a8378;background:#fffdf7;cursor:pointer}
+#dz span{display:flex;justify-content:center}
 #dz.over{border-color:#b7a86b;color:#26241f}
 #msg{color:#b3261e;font-size:14px;min-height:20px;margin:10px 0 0}
 .row{display:flex;gap:10px;align-items:center;padding:11px 2px;border-top:1px solid #f0ead8}
@@ -224,7 +234,7 @@ textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-col
 .nm{flex:1;word-break:break-all;color:#26241f;text-decoration:none;font-size:15px}
 .nm:hover{text-decoration:underline}
 .meta{color:#8a8378;font-size:13px;white-space:nowrap}
-.del{background:none;border:1px solid #e0d9c4;color:#8a8378;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+.del{background:none;border:1px solid #e0d9c4;color:#8a8378;border-radius:8px;padding:6px 8px;cursor:pointer;white-space:nowrap;display:flex;align-items:center}
 .del:active{color:#b3261e;border-color:#b3261e}
 .empty{color:#8a8378;margin:4px 0}
 </style>

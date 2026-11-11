@@ -11,10 +11,12 @@ function proxyUrl(abs, key) {
 function rewriteHtml(html, turl, key) {
   const toProxy = (u) => {
     if (!u || /^(data:|javascript:|mailto:|tel:|#)/i.test(u)) return u;
+    if (u.startsWith("/" + key + "/")) return u;
     try { return proxyUrl(new URL(u, turl).toString(), key); } catch { return u; }
   };
   html = html.replace(/(href|src|action)\s*=\s*"([^"]*)"/gi, (m, a, u) => a + '="' + toProxy(u) + '"');
   html = html.replace(/(href|src|action)\s*=\s*'([^']*)'/gi, (m, a, u) => a + "='" + toProxy(u) + "'");
+  html = html.replace(/(href|src|action)\s*=\s*([^\s"'>]+)/gi, (m, a, u) => a + "=" + toProxy(u));
   html = html.replace(/srcset\s*=\s*"([^"]*)"/gi, (m, s) =>
     'srcset="' + s.split(",").map((p) => {
       const parts = p.trim().split(/\s+/);

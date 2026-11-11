@@ -73,7 +73,7 @@ curl -H "X-Px-Key: 你的授权码" "https://你的域名/https/example.com/"
 - 每个文件按自己的上传时间起 **30 分钟自动销毁**（另有定时扫除兜底）；同一把 PX_KEY 把门
 - 防滥用硬顶：同时最多 200 个文件、总量 1 GB、单文件 100 MB，满了直接拒绝上传，不会无限积压
 
-启用条件：在 Cloudflare 控制台的 R2 里先建一个存储桶（默认名 `px-paste`，与 wrangler.jsonc 里 r2_buckets 的 bucket_name 对上即可）。存储几乎总是空的（30 分钟就清），费用可忽略。
+启用条件：在 Cloudflare 控制台的 R2 里先建一个存储桶（默认名 `pxnbfun`，与 wrangler.jsonc 里 r2_buckets 的 bucket_name 对上即可）。存储几乎总是空的（30 分钟就清），费用可忽略。
 
 ## 已知限制（先说清楚）
 

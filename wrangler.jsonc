@@ -7,7 +7,7 @@
     { "pattern": "px.nbfun.com", "custom_domain": true }
   ],
   "r2_buckets": [
-    { "binding": "PASTE", "bucket_name": "px-paste" }
+    { "binding": "PASTE", "bucket_name": "pxnbfun" }
   ],
   "triggers": {
     "crons": ["*/10 * * * *"]

@@ -20,15 +20,17 @@ jobs:
         env:
           PX_KEY: ${{ secrets.PX_KEY }}
         run: |
+          jar=$(mktemp)
           for i in $(seq 1 12); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://px.nbfun.com/$PX_KEY/https://example.com/")
-            echo "try $i proxied example.com via px.nbfun.com: $code"
-            [ "$code" = "200" ] && break
-            sleep 10
+            page=$(curl -s --max-time 30 "https://px.nbfun.com/https/example.com/")
+            echo "$page" | grep -q 'name="code"' && { echo "try $i: unlock page OK"; break; }
+            echo "try $i: waiting for new deployment"; sleep 10
           done
-          test "$code" = "200"
+          echo "$page" | grep -q 'name="code"'
+          curl -s -c "$jar" -o /dev/null --max-time 30 -X POST "https://px.nbfun.com/auth" \
+            --data-urlencode "code=$PX_KEY" --data-urlencode "next=/https/example.com/"
+          curl -s -b "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "unlock + proxied example.com OK"
           root=$(curl -s --max-time 30 "https://px.nbfun.com/")
           echo "$root" | grep -q "Welcome to nginx" && echo "root decoy OK"
-          direct=$(curl -s --max-time 30 "https://px.nbfun.com/https://example.com/")
-          echo "$direct" | grep -q "Welcome to nginx" && echo "unauthenticated direct entry sees decoy OK"
           curl -s --max-time 30 "https://px.nbfun.com/robots.txt" | grep -q "Disallow: /" && echo "robots OK"
+          rm -f "$jar"

@@ -91,11 +91,11 @@ function inputPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
 <p style="font-size:14px;margin:0 0 8px">点击框复制到个人代理</p>
-<textarea id="p" rows="5" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;cursor:pointer">${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
+<textarea id="p" rows="12" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;overflow:hidden;cursor:pointer">${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
 <div id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:4px 0 10px"></div>
 <input id="u" type="text" placeholder="https://example.com" autocomplete="off"
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<script>var p=document.getElementById('p');p.addEventListener('click',function(){function ok(){var d=document.getElementById('done');d.textContent='已复制';setTimeout(function(){d.textContent='';},2000);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p.value).then(ok,function(){p.select();document.execCommand('copy');ok();});}else{p.select();document.execCommand('copy');ok();}});
+<script>var p=document.getElementById('p');function fit(){p.style.height='auto';p.style.height=p.scrollHeight+'px';}fit();window.addEventListener('resize',fit);p.addEventListener('click',function(){function ok(){var d=document.getElementById('done');d.textContent='已复制';setTimeout(function(){d.textContent='';},2000);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p.value).then(ok,function(){p.select();document.execCommand('copy');ok();});}else{p.select();document.execCommand('copy');ok();}});
 var u=document.getElementById('u');u.focus();u.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=u.value.trim();if(!v)return;var m=v.match(/^(https?):\\/\\/(.+)$/i);if(m){location.href='/'+m[1].toLowerCase()+'/'+m[2];}else{location.href='/https/'+v;}});</script>`;
   return new Response(page, {
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },

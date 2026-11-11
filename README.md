@@ -13,6 +13,15 @@ https://px.nbfun.com/https/example.com/路径
 未授权时打开入口先见授权码表单：填对授权码后种下 30 天 Cookie 并直达原目标，之后同浏览器免填。
 链接、图片、表单、重定向、Cookie 都在代理内回转：经代理登录一次，Cookie 按目标站点分别保存在浏览器里（路径作用域隔离），之后再访问不再弹登录/授权。
 
+控制台（curl / 脚本）用同一授权码，不依赖 Cookie，二选一：
+
+```
+curl -H "X-Px-Key: <授权码>" "https://px.nbfun.com/https/example.com/"
+curl "https://px.nbfun.com/https/example.com/?pxk=<授权码>"
+```
+
+pxk 参数验完即摘除，不会转发给目标站。
+
 ## 伪装与禁爬
 
 - 根路径与一切无关路径一律返回 nginx 默认欢迎页（200），不暴露代理存在；只有 /https、/http 入口路径会出授权码表单。

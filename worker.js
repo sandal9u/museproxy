@@ -42,7 +42,10 @@ function authCookie(key) {
   return "px_auth=" + encodeURIComponent(key) + "; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax";
 }
 
-function authed(request, key) {
+// 三种授权通道共用同一授权码：浏览器 Cookie（表单解锁后）/ 请求头 X-Px-Key / 查询参数 pxk（后两者给控制台用）
+function authed(request, key, pxk) {
+  if (pxk !== null && pxk === key) return true;
+  if (request.headers.get("X-Px-Key") === key) return true;
   const m = (request.headers.get("Cookie") || "").match(/(?:^|;\s*)px_auth=([^;]+)/);
   return !!(m && decodeURIComponent(m[1]) === key);
 }
@@ -130,11 +133,18 @@ export default {
     const scheme = entry[1].toLowerCase();
     const rest = entry[3] || "";
 
-    if (!authed(request, KEY)) return unlockPage(path + url.search);
+    // pxk 是我方授权参数：验完即从转发给目标站的查询串里摘掉，目标站看不见
+    const params = new URLSearchParams(url.search);
+    const pxk = params.get("pxk");
+    if (pxk !== null) params.delete("pxk");
+    const rest2 = params.toString();
+    const fwdSearch = rest2 ? "?" + rest2 : "";
+
+    if (!authed(request, KEY, pxk)) return unlockPage(path + url.search);
     if (!rest) return inputPage();
 
     let turl;
-    try { turl = new URL(scheme + "://" + rest + url.search); } catch { return decoy(); }
+    try { turl = new URL(scheme + "://" + rest + fwdSearch); } catch { return decoy(); }
 
     // 浏览器式请求头（通过率主要靠这一组 + 真实 cookie 回放）
     const headers = new Headers();

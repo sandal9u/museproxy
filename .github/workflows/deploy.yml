@@ -30,6 +30,8 @@ jobs:
           curl -s -c "$jar" -o /dev/null --max-time 30 -X POST "https://px.nbfun.com/auth" \
             --data-urlencode "code=$PX_KEY" --data-urlencode "next=/https/example.com/"
           curl -s -b "$jar" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "unlock + proxied example.com OK"
+          curl -s -H "X-Px-Key: $PX_KEY" --max-time 30 "https://px.nbfun.com/https/example.com/" | grep -q "Example Domain" && echo "header auth OK"
+          curl -s --max-time 30 "https://px.nbfun.com/https/example.com/?pxk=$PX_KEY" | grep -q "Example Domain" && echo "query auth OK"
           root=$(curl -s --max-time 30 "https://px.nbfun.com/")
           echo "$root" | grep -q "Welcome to nginx" && echo "root decoy OK"
           curl -s --max-time 30 "https://px.nbfun.com/robots.txt" | grep -q "Disallow: /" && echo "robots OK"

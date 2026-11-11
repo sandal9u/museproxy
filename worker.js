@@ -246,6 +246,16 @@ document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('cli
 
 const gonePage = (m) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste</title><body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px;background:#f7f3ea;color:#222"><p>${escHtml(m)}</p><p><a href="/paste">返回目录</a></p>`;
 
+function servePasteFile(obj, sub) {
+  // 不强制下载：浏览器能解析的（图片/PDF/文本等）直接显示，解析不了的才下载；filename* 给浏览器作保存名（原名）
+  const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^\d+-/, "");
+  const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });
+  obj.writeHttpMetadata(headers);
+  if (!headers.get("Content-Type")) headers.set("Content-Type", "application/octet-stream");
+  headers.set("Content-Disposition", "inline; filename*=UTF-8''" + encodeURIComponent(orig));
+  return new Response(obj.body, { headers });
+}
+
 async function handlePaste(request, env, KEY, url, sub) {
   const isBrowser = (request.headers.get("Accept") || "").includes("text/html");
   const pxk = url.searchParams.get("pxk");
@@ -261,6 +271,12 @@ async function handlePaste(request, env, KEY, url, sub) {
       return resp;
     }
     return keyPage();
+  }
+  // 文件下载凭地址即可、不用 key（目录列表、上传、删除仍要 key 把门）
+  if (sub && request.method === "GET") {
+    const obj0 = await env.PASTE.get(sub);
+    if (obj0 && !pasteExpired(obj0)) return servePasteFile(obj0, sub);
+    if (obj0) await env.PASTE.delete(sub);
   }
   if (!authed(request, KEY, pxk)) return isBrowser ? keyPage() : decoy();
 
@@ -328,13 +344,7 @@ async function handlePaste(request, env, KEY, url, sub) {
     await env.PASTE.delete(sub);
     return htmlResp(gonePage("文件已过期，已清除"), 410);
   }
-  // 不强制下载：浏览器能解析的（图片/PDF/文本等）直接显示，解析不了的才下载；filename* 给浏览器作保存名（原名）
-  const orig = (obj.customMetadata && obj.customMetadata.name) || sub.replace(/^\d+-/, "");
-  const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG });
-  obj.writeHttpMetadata(headers);
-  if (!headers.get("Content-Type")) headers.set("Content-Type", "application/octet-stream");
-  headers.set("Content-Disposition", "inline; filename*=UTF-8''" + encodeURIComponent(orig));
-  return new Response(obj.body, { headers });
+  return servePasteFile(obj, sub);
 }
 
 export default {

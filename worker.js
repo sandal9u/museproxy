@@ -81,7 +81,7 @@ function keyPage() {
 <body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
 <input id="k" type="text" autocomplete="off" autofocus
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<script>var k=document.getElementById('k');k.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/&$/,'');var sep=q?'&':'?';location.href=location.pathname+q+sep+'pxk='+encodeURIComponent(v);});</script>`;
+<script>var k=document.getElementById('k');k.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/[?&]$/,'');var sep=q?'&':'?';fetch(location.pathname+q+sep+'pxk='+encodeURIComponent(v),{headers:{'X-Px-Unlock':'1','Accept':'text/html'}}).then(function(){location.replace(location.pathname+q);},function(){location.replace(location.pathname+q);});});</script>`;
   return new Response(page, {
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
   });
@@ -90,6 +90,7 @@ function keyPage() {
 function inputPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
+<p style="font-size:14px;margin:0 0 8px">点击框复制到个人代理</p>
 <textarea id="p" rows="5" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;cursor:pointer">${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
 <div id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:4px 0 10px"></div>
 <input id="u" type="text" placeholder="https://example.com" autocomplete="off"
@@ -153,6 +154,12 @@ export default {
     const isBrowser = (request.headers.get("Accept") || "").includes("text/html");
 
     if (pxk !== null && isBrowser) {
+      // 页内解锁（输码框 fetch 发起）：无论对错都回 200、不跳转，地址栏永远不出现 pxk；对了才种 Cookie
+      if (request.headers.get("X-Px-Unlock") === "1") {
+        const resp = new Response(null, { status: 200, headers: { "X-Robots-Tag": ROBOTS_TAG } });
+        if (plantCookie) resp.headers.append("Set-Cookie", authCookie(KEY));
+        return resp;
+      }
       if (plantCookie) {
         const resp = new Response(null, {
           status: 302,

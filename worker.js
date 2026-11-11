@@ -63,7 +63,7 @@ function unlockPage(next) {
 <body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
 <form method="POST" action="/auth">
 <input type="hidden" name="next" value="${esc}">
-<input type="password" name="code" placeholder="授权码" autocomplete="off" autofocus
+<input type="text" name="code" placeholder="授权码" autocomplete="off" autofocus
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
 <button type="submit" style="width:100%;margin-top:10px;padding:12px;font-size:16px;border:0;border-radius:8px;background:#222;color:#fff">OK</button>
 </form>`;

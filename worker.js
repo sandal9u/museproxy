@@ -79,9 +79,12 @@ function proxyPath(abs) {
 function keyPage() {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:360px;margin:18vh auto;padding:0 16px">
+<div style="display:flex;gap:8px">
 <input id="k" type="text" placeholder="请输入key" autocomplete="off" autofocus
- style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
-<script>var k=document.getElementById('k');k.addEventListener('keydown',function(e){if(e.key!=='Enter')return;var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/[?&]$/,'');var sep=q?'&':'?';fetch(location.pathname+q+sep+'pxk='+encodeURIComponent(v),{headers:{'X-Px-Unlock':'1','Accept':'text/html'}}).then(function(){location.replace(location.pathname+q);},function(){location.replace(location.pathname+q);});});</script>`;
+ style="flex:1;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
+<button id="b" style="padding:12px 18px;font-size:16px;border:1px solid #bbb;border-radius:8px;background:#fff">确认</button>
+</div>
+<script>var k=document.getElementById('k');function go(){var v=k.value.trim();if(!v)return;var q=location.search.replace(/([?&])pxk=[^&]*&?/,'$1').replace(/[?&]$/,'');var sep=q?'&':'?';fetch(location.pathname+q+sep+'pxk='+encodeURIComponent(v),{headers:{'X-Px-Unlock':'1','Accept':'text/html'}}).then(function(){location.replace(location.pathname+q);},function(){location.replace(location.pathname+q);});}k.addEventListener('keydown',function(e){if(e.key==='Enter')go();});document.getElementById('b').addEventListener('click',go);</script>`;
   return new Response(page, {
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG },
   });
@@ -175,24 +178,63 @@ async function uniquePasteName(env, orig) {
 function pastePage(objs) {
   const rows = objs.map((o) =>
     '<div class="row"><a class="nm" href="/paste/' + encodeURIComponent(o.key) + '">' + escHtml(o.key) +
-    '</a><span class="sz">' + humanSize(o.size) + '</span><span class="rm">剩 ' + pasteRemainMin(o) +
+    '</a><span class="meta">' + humanSize(o.size) + ' · 剩 ' + pasteRemainMin(o) +
     ' 分钟</span><button class="del" data-k="' + escHtml(o.key) + '">删除</button></div>'
   ).join("\n");
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste · 临时中转站</title>
-<body style="font-family:system-ui;max-width:720px;margin:6vh auto;padding:0 16px;background:#f7f3ea;color:#222">
-<h1 style="font-size:20px;margin:0 0 4px">临时中转站</h1>
-<p style="color:#666;font-size:13px;margin:0 0 16px">每个文件按上传时间起 30 分钟自动销毁 · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
-<textarea id="t" rows="4" placeholder="粘贴文本到这里" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9c2b2;border-radius:8px"></textarea>
-<div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap"><input id="n" type="text" placeholder="文本文件名（可空）" style="flex:1;min-width:140px;padding:9px;border:1px solid #bbb;border-radius:8px"><button id="bt" style="padding:9px 16px">存文本</button></div>
-<div style="margin:8px 0 16px;display:flex;gap:8px;flex-wrap:wrap"><input id="f" type="file" style="flex:1;min-width:180px"><button id="bf" style="padding:9px 16px">传文件</button></div>
-<p id="msg" style="color:#b00;font-size:14px;min-height:20px;margin:0 0 8px"></p>
-${rows || '<p style="color:#888">目录是空的。</p>'}
-<style>.row{display:flex;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid #ddd}.nm{flex:1;word-break:break-all}.sz,.rm{color:#666;font-size:13px;white-space:nowrap}.del{white-space:nowrap}</style>
+<body>
+<div class="wrap">
+<h1>临时中转站</h1>
+<p class="sub">每个文件按上传时间起 30 分钟自动销毁 · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
+<div class="card">
+<textarea id="t" rows="4" placeholder="粘贴文本到这里"></textarea>
+<div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn">存文本</button></div>
+<div id="dz"><span id="fn">点这里选文件，或把文件拖进来</span></div>
+<input id="f" type="file" hidden>
+<div class="line" style="justify-content:flex-end"><button id="bf" class="btn">传文件</button></div>
+<p id="msg"></p>
+</div>
+<div class="card">
+${rows || '<p class="empty">目录是空的。</p>'}
+</div>
+</div>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f7f3ea;color:#26241f;margin:0}
+.wrap{max-width:720px;margin:5vh auto;padding:0 16px 40px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:#8a8378;font-size:13px;margin:0 0 18px}
+.card{background:#fff;border:1px solid #e7e0cd;border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:0 2px 10px rgba(90,80,50,.06)}
+textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;resize:vertical}
+textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
+.line{display:flex;gap:8px;margin-top:10px}
+.line input[type=text]{flex:1;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;min-width:0}
+.btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn:active{opacity:.75}
+#dz{margin-top:14px;border:1.5px dashed #cfc5a6;border-radius:10px;padding:20px 12px;text-align:center;color:#8a8378;font-size:14px;background:#fffdf7;cursor:pointer}
+#dz.over{border-color:#b7a86b;color:#26241f}
+#msg{color:#b3261e;font-size:14px;min-height:20px;margin:10px 0 0}
+.row{display:flex;gap:10px;align-items:center;padding:11px 2px;border-top:1px solid #f0ead8}
+.row:first-child{border-top:none;padding-top:2px}
+.nm{flex:1;word-break:break-all;color:#26241f;text-decoration:none;font-size:15px}
+.nm:hover{text-decoration:underline}
+.meta{color:#8a8378;font-size:13px;white-space:nowrap}
+.del{background:none;border:1px solid #e0d9c4;color:#8a8378;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+.del:active{color:#b3261e;border-color:#b3261e}
+.empty{color:#8a8378;margin:4px 0}
+</style>
 <script>
 var msg = document.getElementById('msg');
 function send(fd) { fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
 document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
 document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
+var fi = document.getElementById('f'), dz = document.getElementById('dz'), fn = document.getElementById('fn');
+function showName() { if (fi.files[0]) fn.textContent = fi.files[0].name; }
+dz.addEventListener('click', function () { fi.click(); });
+fi.addEventListener('change', showName);
+dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', function () { dz.classList.remove('over'); });
+dz.addEventListener('drop', function (e) { e.preventDefault(); dz.classList.remove('over'); if (e.dataTransfer.files.length) { try { fi.files = e.dataTransfer.files; } catch (err) {} showName(); } });
 document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('click', function () { fetch('/paste/' + encodeURIComponent(b.getAttribute('data-k')), { method: 'DELETE' }).then(function () { location.reload(); }); }); });
 </script>`;
 }

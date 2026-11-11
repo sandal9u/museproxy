@@ -153,7 +153,7 @@ function sanitizeName(name) {
 }
 function randCode() {
   const a = "abcdefghjkmnpqrstuvwxyz23456789";
-  const b = new Uint8Array(6);
+  const b = new Uint8Array(4);
   crypto.getRandomValues(b);
   return [...b].map((x) => a[x % a.length]).join("");
 }
@@ -294,7 +294,7 @@ async function handlePaste(request, env, KEY, url, sub) {
         size = new TextEncoder().encode(text).length;
         if (size > PASTE_MAX_FILE) return jsonResp({ error: "文本不能超过 100 MB" }, 413);
         let nm = sanitizeName(String(fd.get("name") || ""));
-        if (!fd.get("name")) nm = "文本.txt";
+        if (!fd.get("name")) nm = "note.txt";
         else if (!nm.includes(".")) nm += ".txt";
         body = text; origName = nm; kind = "text"; ctype = "text/plain; charset=utf-8";
       } else {

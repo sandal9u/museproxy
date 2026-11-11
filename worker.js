@@ -87,11 +87,11 @@ function keyPage() {
   });
 }
 
-function inputPage() {
+function inputPage(host) {
   const page = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>px</title>
 <body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px">
 <p style="font-size:14px;margin:0 0 8px">点击框复制到个人代理</p>
-<textarea id="p" rows="12" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;overflow:hidden;cursor:pointer">${PROMPT_TEXT.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
+<textarea id="p" rows="12" readonly style="width:100%;box-sizing:border-box;padding:12px;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace;border:1px solid #c9c2b2;border-radius:8px;background:#f7f3ea;resize:none;overflow:hidden;cursor:pointer">${promptText(host).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea>
 <div id="done" style="color:#1a7f37;font-size:13px;height:18px;margin:4px 0 10px"></div>
 <input id="u" type="text" placeholder="https://example.com" autocomplete="off"
  style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px">
@@ -119,11 +119,12 @@ function rewriteHtml(html, turl) {
   return html;
 }
 
-const PROMPT_TEXT = [
+// 提示词里的域名不写死：按来访请求的 host 现拼（谁部署的就显示谁的域名）
+const promptText = (host) => [
   "如果需要抓取网页的时候请走以下方式",
-  "浏览器：打开 https://px.nbfun.com/https/<目标网址> 经代理抓取。",
+  "浏览器：打开 https://" + host + "/https/<目标网址> 经代理抓取。",
   "输 key：需要授权码时，拉起安全保险库里 px 的录入卡让用户输入，不要让用户在聊天里发明文。",
-  "控制台：从安全保险库的 px 取 key，以请求头 X-Px-Key 调用，例如 curl -H \"X-Px-Key: <key>\" \"https://px.nbfun.com/https/example.com/\"。"
+  "控制台：从安全保险库的 px 取 key，以请求头 X-Px-Key 调用，例如 curl -H \"X-Px-Key: <key>\" \"https://" + host + "/https/example.com/\"。"
 ].join("\n");
 
 export default {
@@ -173,7 +174,7 @@ export default {
     }
     if (!authed(request, KEY, pxk)) return isBrowser ? keyPage() : decoy();
     if (!rest) {
-      const page = inputPage();
+      const page = inputPage(url.host);
       if (plantCookie) page.headers.append("Set-Cookie", authCookie(KEY));
       return page;
     }

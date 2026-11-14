@@ -131,19 +131,21 @@ const promptText = (host) => [
 ].join("\n");
 
 // ===== /paste 临时中转站（2026-11-14 起公开，无 key）=====
-// R2 存储、单一目录列表式呈现；每个文件按自身上传时间起 30 分钟销毁（定时扫除＋读取时惰性过期）。
+// R2 存储、单一目录列表式呈现；每个文件的销毁时间由上传者自选（1 分钟–3 小时，默认 30 分钟；定时扫除＋读取时惰性过期）。
 // 公开后的安全防范：①上传限流（单 IP 10 分钟 10 次＋全站每日 1000 次，计数存 R2 __rl/ 前缀）
 // ②类型黑名单（网页/脚本/可执行类不许传）＋站内硬顶（件数／总量／单文件）
 // ③下载一律安全头：仅图片与纯文本可内联预览且类型由服务端按扩展名写死，其余附件下载；nosniff＋CSP sandbox
 // ④删除凭上传时发放的一次性令牌（存上传者浏览器，免输 key）；持 px 授权的站长可删任意文件。px 代理本体仍需 key，与 paste 无关。
-const PASTE_TTL_MS = 30 * 60 * 1000;
+const PASTE_TTL_CHOICES_MIN = [1, 5, 15, 30, 60, 120, 180];
+const PASTE_TTL_DEFAULT_MS = 30 * 60 * 1000;
+const pasteTtlMs = (v) => { const m = parseInt(v, 10); return PASTE_TTL_CHOICES_MIN.includes(m) ? m * 60000 : PASTE_TTL_DEFAULT_MS; };
 const PASTE_MAX_FILES = 200;
 const PASTE_MAX_TOTAL = 1024 * 1024 * 1024;
 const PASTE_MAX_FILE = 100 * 1024 * 1024;
 const PASTE_RL_WINDOW_MS = 10 * 60 * 1000;
 const PASTE_RL_MAX = 10;
 const PASTE_DAILY_MAX = 1000;
-const PASTE_BLOCKED_EXTS = new Set(["html", "htm", "xhtml", "shtml", "xml", "xsl", "svg", "js", "mjs", "cjs", "jsx", "ts", "tsx", "php", "phtml", "asp", "aspx", "jsp", "cgi", "pl", "py", "rb", "exe", "dll", "com", "scr", "msi", "apk", "ipa", "jar", "war", "class", "sh", "bash", "zsh", "bat", "cmd", "ps1", "vbs", "reg", "swf", "wasm", "hta", "lnk"]);
+const PASTE_BLOCKED_EXTS = new Set(["xml", "xsl", "svg", "js", "mjs", "cjs", "jsx", "ts", "tsx", "php", "phtml", "asp", "aspx", "jsp", "cgi", "pl", "py", "rb", "exe", "dll", "com", "scr", "msi", "apk", "ipa", "jar", "war", "class", "sh", "bash", "zsh", "bat", "cmd", "ps1", "vbs", "reg", "swf", "wasm", "hta", "lnk"]);
 const PASTE_INLINE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon", txt: "text/plain; charset=utf-8", md: "text/markdown; charset=utf-8" };
 const pasteExt = (name) => { const p = String(name || "").split("."); return p.length > 1 ? p.pop().toLowerCase() : ""; };
 const pasteBlocked = (name) => PASTE_BLOCKED_EXTS.has(pasteExt(name));
@@ -177,8 +179,10 @@ async function pasteUploadGate(env, request) {
 const escHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const humanSize = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B");
 const pasteAge = (o) => Date.now() - new Date(o.uploaded).getTime();
-const pasteRemainMin = (o) => Math.max(0, Math.ceil((PASTE_TTL_MS - pasteAge(o)) / 60000));
-const pasteExpired = (o) => pasteAge(o) > PASTE_TTL_MS;
+const pasteExpiry = (o) => { const e = o.customMetadata && Number(o.customMetadata.exp); return e > 0 ? e : new Date(o.uploaded).getTime() + PASTE_TTL_DEFAULT_MS; };
+const pasteRemainMin = (o) => Math.max(0, Math.ceil((pasteExpiry(o) - Date.now()) / 60000));
+const pasteRemainText = (o) => { const m = pasteRemainMin(o); return m >= 60 ? Math.floor(m / 60) + " 小时" + (m % 60 ? " " + (m % 60) + " 分钟" : "") : m + " 分钟"; };
+const pasteExpired = (o) => Date.now() > pasteExpiry(o);
 const htmlResp = (html, status = 200) => new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": ROBOTS_TAG } });
 const jsonResp = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "X-Robots-Tag": ROBOTS_TAG } });
 // 界面图标（内联 SVG，描边随按钮文字色）：check 确认 / filePlus 存文本 / upload 传文件 / cloud 选文件 / trash 删除
@@ -228,17 +232,17 @@ async function listAllPaste(env) {
 function pastePage(objs, isOwner) {
   const rows = objs.map((o) =>
     '<div class="row" data-k="' + escHtml(o.key) + '"><a class="nm" href="/paste/' + encodeURIComponent(o.key) + '">' + escHtml(o.key) +
-    '</a><span class="meta">' + humanSize(o.size) + ' · 剩 ' + pasteRemainMin(o) +
-    ' 分钟</span>' + (isOwner ? '<button class="del" data-k="' + escHtml(o.key) + '" title="删除" aria-label="删除">' + ICON.trash + '</button>' : '') + '</div>'
+    '</a><span class="meta">' + humanSize(o.size) + ' · 剩 ' + pasteRemainText(o) + '</span>' + (isOwner ? '<button class="del" data-k="' + escHtml(o.key) + '" title="删除" aria-label="删除">' + ICON.trash + '</button>' : '') + '</div>'
   ).join("\n");
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste · 临时中转站</title>
 <body>
 <div class="wrap">
 <p class="home"><a href="https://nbfun.com/">← NBFun 首页</a></p>
 <h1>临时中转站</h1>
-<p class="sub">公开中转：这里的文件任何人都能看到和下载，别放敏感内容 · 每个文件按上传时间起 30 分钟自动销毁 · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
+<p class="sub">公开中转：这里的文件任何人都能看到和下载，别放敏感内容 · 销毁时间在下方自选（1 分钟 – 3 小时） · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
 <div class="card">
-<textarea id="t" rows="4" placeholder="粘贴文本到这里"></textarea>
+<div class="line" style="margin-top:0;align-items:center"><label for="ttl" style="font-size:14px;color:#8a8378;white-space:nowrap">销毁时间</label><select id="ttl"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option><option value="180">3 小时</option></select></div>
+<textarea id="t" rows="4" placeholder="粘贴文本到这里" style="margin-top:10px"></textarea>
 <div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn" title="存文本" aria-label="存文本">${ICON.filePlus}</button></div>
 <div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span></div>
 <input id="f" type="file" hidden>
@@ -261,6 +265,7 @@ h1{font-size:22px;margin:0 0 4px}
 textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;resize:vertical}
 textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
 .line{display:flex;gap:8px;margin-top:10px}
+.line select{padding:9px 10px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7}
 .line input[type=text]{flex:1;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;min-width:0}
 .btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center}
 .btn:active{opacity:.75}
@@ -279,7 +284,7 @@ textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-col
 </style>
 <script>
 var msg = document.getElementById('msg');
-function send(fd) { fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
+function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
 document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
 document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
 var fi = document.getElementById('f'), dz = document.getElementById('dz'), fn = document.getElementById('fn');
@@ -363,8 +368,9 @@ async function handlePaste(request, env, KEY, url, sub) {
       const stored = autoText ? await tsTextName(env) : await tsFileName(env, origName);
       if (autoText) origName = stored;
       const delToken = crypto.randomUUID();
-      await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: origName, del: delToken } });
-      return jsonResp({ ok: true, name: stored, token: delToken });
+      const ttlMs = pasteTtlMs(fd.get("ttl"));
+      await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: origName, del: delToken, exp: String(Date.now() + ttlMs) } });
+      return jsonResp({ ok: true, name: stored, token: delToken, ttlMin: ttlMs / 60000 });
     }
     return new Response("method not allowed", { status: 405 });
   }
@@ -384,8 +390,9 @@ async function handlePaste(request, env, KEY, url, sub) {
     const ctype = request.headers.get("Content-Type") || "application/octet-stream";
     const kind = ctype.startsWith("text/plain") ? "text" : "file";
     const delToken = crypto.randomUUID();
-    await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: orig, del: delToken } });
-    return textResp("ok\n" + url.origin + "/paste/" + encodeURIComponent(stored) + "\ndelete-token: " + delToken + "\n");
+    const ttlMs = pasteTtlMs(url.searchParams.get("ttl") || request.headers.get("X-Paste-Ttl"));
+    await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: orig, del: delToken, exp: String(Date.now() + ttlMs) } });
+    return textResp("ok\n" + url.origin + "/paste/" + encodeURIComponent(stored) + "\ndelete-token: " + delToken + "\nexpires-min: " + (ttlMs / 60000) + "\n");
   }
   if (request.method === "DELETE") {
     if (!isOwner) {
@@ -534,7 +541,7 @@ export default {
     return new Response(resp.body, { status: resp.status, headers: out });
   },
 
-  // 定时扫除（唯一的定时器）：每 10 分钟醒一次，只删上传已满 30 分钟的文件；顺手清一天前的限流计数
+  // 定时扫除（唯一的定时器）：每 10 分钟醒一次，只删已到各自销毁时间的文件；顺手清一天前的限流计数
   async scheduled(event, env, ctx) {
     if (!env.PASTE) return;
     const objs = await listAllPaste(env);

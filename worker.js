@@ -244,10 +244,10 @@ function pastePage(objs, isOwner) {
 <div class="wrap">
 <p class="home"><a href="https://nbfun.com/">← NBFun 首页</a></p>
 <h1>临时中转站</h1>
-<p class="sub">公开中转：这里的文件任何人都能看到和下载，别放敏感内容 · 销毁时间在下方自选（1 分钟 – 3 小时） · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
+<p class="sub">临时中转：上传后会得到你的专属地址，凭地址取文件；目录不对外公开，别人看不到你的文件（但拿到地址的人就能下载，地址别乱传） · 销毁时间在下方自选（1 分钟 – 3 小时）${isOwner ? ' · 共 ' + objs.length + ' / ' + PASTE_MAX_FILES + ' 个' : ''}</p>
 <div class="card">
 <div class="line" style="margin-top:0;align-items:center"><label for="ttl" style="font-size:14px;color:#8a8378;white-space:nowrap">销毁时间</label><select id="ttl"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option><option value="180">3 小时</option></select></div>
-<p class="hint">HTML 文件单独一条规则：固定 15 分钟销毁，打开时要输入上传生成的 6 位钥匙（钥匙会显示在下方列表里你上传的那一行）。</p>
+<p class="hint">HTML 文件单独一条规则：固定 15 分钟销毁，打开时要输入上传生成的 6 位钥匙（钥匙会显示在下方「我传过的文件」里）。</p>
 <textarea id="t" rows="4" placeholder="粘贴文本到这里" style="margin-top:10px"></textarea>
 <div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn" title="存文本" aria-label="存文本">${ICON.filePlus}</button></div>
 <div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span></div>
@@ -256,7 +256,7 @@ function pastePage(objs, isOwner) {
 <p id="msg"></p>
 </div>
 <div class="card">
-${rows || '<p class="empty">目录是空的。</p>'}
+${isOwner ? (rows || '<p class="empty">目录是空的。</p>') : '<h2 class="mineh">我传过的文件</h2><div id="mine"><p class="empty">你在这个浏览器里还没传过文件。</p></div>'}
 </div>
 </div>
 <style>
@@ -270,6 +270,7 @@ h1{font-size:22px;margin:0 0 4px}
 .card{background:#fff;border:1px solid #e7e0cd;border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:0 2px 10px rgba(90,80,50,.06)}
 textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;resize:vertical}
 .hint{font-size:12px;color:#8a8378;margin:8px 0 0}
+.mineh{font-size:15px;margin:0 0 4px}
 textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
 .line{display:flex;gap:8px;margin-top:10px}
 .line select{padding:9px 10px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7}
@@ -291,7 +292,7 @@ textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-col
 </style>
 <script>
 var msg = document.getElementById('msg');
-function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); if (j.htmlKey && j.name) saveHtmlKey(j.name, j.htmlKey); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
+function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); if (j.htmlKey && j.name) saveHtmlKey(j.name, j.htmlKey); if (j.name && j.token) saveRecord({ n: j.name, t: j.token, h: j.htmlKey || null }); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
 document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
 document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
 var fi = document.getElementById('f'), dz = document.getElementById('dz'), fn = document.getElementById('fn');
@@ -307,11 +308,37 @@ function myHtmlKeys() { try { return JSON.parse(localStorage.getItem('pasteHtmlK
 function saveHtmlKey(name, key) { var m = myHtmlKeys(); m[name] = key; try { localStorage.setItem('pasteHtmlKeys', JSON.stringify(m)); } catch (e) {} }
 var hks = myHtmlKeys();
 document.querySelectorAll('.row').forEach(function (row) { var k = row.getAttribute('data-k'); if (k && hks[k]) { var a = row.querySelector('a.nm'); if (a) a.href = '/paste/' + encodeURIComponent(k) + '?k=' + hks[k]; var chip = document.createElement('span'); chip.className = 'meta'; chip.textContent = '🔑 ' + hks[k]; var meta = row.querySelector('.meta'); if (meta) row.insertBefore(chip, meta); else row.appendChild(chip); } });
-function doDelete(k) { var t = myTokens()[k]; fetch('/paste/' + encodeURIComponent(k), { method: 'DELETE', headers: t ? { 'X-Paste-Token': t } : {} }).then(function () { location.reload(); }); }
+function myRecords() { var out = []; try { out = JSON.parse(localStorage.getItem('pasteMine') || '[]'); } catch (e) { out = []; } if (!Array.isArray(out)) out = []; var seen = {}; out.forEach(function (r) { seen[r.n] = true; }); var toks = myTokens(), hk = myHtmlKeys(); Object.keys(toks).forEach(function (n) { if (!seen[n]) { out.push({ n: n, t: toks[n], h: hk[n] || null }); seen[n] = true; } }); return out; }
+function saveRecord(rec) { var m = myRecords().filter(function (r) { return r.n !== rec.n; }); m.push(rec); try { localStorage.setItem('pasteMine', JSON.stringify(m.slice(-200))); } catch (e) {} }
+function dropRecord(name) { var m = myRecords().filter(function (r) { return r.n !== name; }); try { localStorage.setItem('pasteMine', JSON.stringify(m)); } catch (e) {} }
+function doDelete(k) { var rec = null; myRecords().forEach(function (r) { if (r.n === k) rec = r; }); var t = (rec && rec.t) || myTokens()[k]; fetch('/paste/' + encodeURIComponent(k), { method: 'DELETE', headers: t ? { 'X-Paste-Token': t } : {} }).then(function (r) { if (r.ok) dropRecord(k); location.reload(); }); }
 document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('click', function () { doDelete(b.getAttribute('data-k')); }); });
 var TRASH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 var toks = myTokens();
 document.querySelectorAll('.row').forEach(function (row) { var k = row.getAttribute('data-k'); if (k && toks[k] && !row.querySelector('.del')) { var b = document.createElement('button'); b.className = 'del'; b.title = '删除'; b.setAttribute('aria-label', '删除'); b.innerHTML = TRASH; b.addEventListener('click', function () { doDelete(k); }); row.appendChild(b); } });
+var mineBox = document.getElementById('mine');
+if (mineBox) {
+  var recs = myRecords();
+  if (recs.length) {
+    mineBox.innerHTML = '<p class="empty">正在读取你传过的文件…</p>';
+    fetch('/paste/mine', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: recs.map(function (r) { return { name: r.n, token: r.t }; }) }) }).then(function (r) { return r.json(); }).then(function (j) {
+      var files = (j && j.files) || [];
+      var alive = {}; files.forEach(function (f) { alive[f.name] = true; });
+      recs.forEach(function (r) { if (!alive[r.n]) dropRecord(r.n); });
+      if (!files.length) { mineBox.innerHTML = '<p class="empty">你传过的文件都已过期或删除。</p>'; return; }
+      mineBox.innerHTML = '';
+      files.forEach(function (f) {
+        var rec = null; recs.forEach(function (r) { if (r.n === f.name) rec = r; });
+        var row = document.createElement('div'); row.className = 'row';
+        var a = document.createElement('a'); a.className = 'nm'; a.textContent = f.name; a.href = '/paste/' + encodeURIComponent(f.name) + (rec && rec.h ? '?k=' + rec.h : ''); row.appendChild(a);
+        if (rec && rec.h) { var chip = document.createElement('span'); chip.className = 'meta'; chip.textContent = '🔑 ' + rec.h; row.appendChild(chip); }
+        var meta = document.createElement('span'); meta.className = 'meta'; meta.textContent = f.sizeText + ' · 剩 ' + f.remainText; row.appendChild(meta);
+        var b = document.createElement('button'); b.className = 'del'; b.title = '删除'; b.setAttribute('aria-label', '删除'); b.innerHTML = TRASH; b.addEventListener('click', function () { doDelete(f.name); }); row.appendChild(b);
+        mineBox.appendChild(row);
+      });
+    }).catch(function () { mineBox.innerHTML = '<p class="empty">读取失败，刷新再试。</p>'; });
+  }
+}
 </script>`;
 }
 
@@ -402,10 +429,27 @@ async function handlePaste(request, env, KEY, url, sub) {
     if (obj0) await env.PASTE.delete(sub);
   }
 
+  // 「我传过的文件」：凭删除令牌证明归属，只返回本人文件的状态（目录不公开后的替代）
+  if (sub === "mine" && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return jsonResp({ error: "bad json" }, 400); }
+    const items = Array.isArray(body && body.items) ? body.items.slice(0, 200) : [];
+    const files = [];
+    for (const it of items) {
+      if (!it || typeof it.name !== "string" || typeof it.token !== "string") continue;
+      const head = await env.PASTE.head(it.name);
+      if (!head || pasteExpired(head)) continue;
+      if (!head.customMetadata || head.customMetadata.del !== it.token) continue;
+      files.push({ name: it.name, sizeText: humanSize(head.size), remainText: pasteRemainText(head), html: !!head.customMetadata.hk });
+    }
+    return jsonResp({ ok: true, files });
+  }
+
   if (!sub) {
     if (request.method === "GET") {
+      if (!isOwner) return htmlResp(pastePage([], false));
       const objs = (await listAllPaste(env)).sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
-      return htmlResp(pastePage(objs, isOwner));
+      return htmlResp(pastePage(objs, true));
     }
     if (request.method === "POST") {
       let fd;

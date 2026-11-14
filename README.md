@@ -68,24 +68,27 @@ curl -H "X-Px-Key: 你的授权码" "https://你的域名/https/example.com/"
 
 同一个 Worker 还带一个临时中转站，解决"手边有个文件或一段文本，想马上弄到另一台设备上，但各家云盘都要登录"的麻烦：
 
-- 打开 `/paste` 是一个目录页：所有在站文件平铺列出（名字、大小、剩余时间），点开即取；也能在同页贴文本、传文件（格式不限）
+- 打开 `/paste` 是一个目录页：所有在站文件平铺列出（名字、大小、剩余时间），点开即取；也能在同页贴文本、传文件
 - 每次上传自动在文件名前加上 Unix 时间戳（如 `1762900000-报告.pdf`），同名永不覆盖；文本不写名字时自动存为 `text-<时间戳>.md`
-- 每个文件按自己的上传时间起 **30 分钟自动销毁**（另有定时扫除兜底）；目录、上传、删除用同一把 PX_KEY 把门，**下载凭链接即可、不用 key**（方便在任何设备上直接取）
+- 每个文件按自己的上传时间起 **30 分钟自动销毁**（另有定时扫除兜底）
+- **2026-11-14 起公开、无需 key**：目录、上传、下载全部开放；安全防范四件——①限流：单 IP 10 分钟最多传 10 次、全站每日 1000 次（计数存 R2 `__rl/` 前缀）②类型黑名单：网页/脚本/可执行类（html/svg/js/exe/sh 等）禁止上传 ③下载安全头：只有图片与纯文本按扩展名写死类型内联预览，其余一律附件下载，并带 nosniff 与 CSP sandbox，杜绝把中转站当图床/钓鱼页 ④删除凭上传时发放的一次性令牌（网页端自动存浏览器、curl 在 PUT 响应里返回），陌生人删不掉别人的文件；站长持 PX_KEY 仍可删任意文件并豁免限流与黑名单
 - 防滥用硬顶：同时最多 200 个文件、总量 1 GB、单文件 100 MB，满了直接拒绝上传，不会无限积压
 
 启用条件：在 Cloudflare 控制台的 R2 里先建一个存储桶（默认名 `pxnbfun`，与 wrangler.jsonc 里 r2_buckets 的 bucket_name 对上即可）。存储几乎总是空的（30 分钟就清），费用可忽略。
 
-命令行（curl）同样可用，授权走 `X-Px-Key` 请求头：
+命令行（curl）同样可用，无需 key：
 
 ```bash
-# 传文件（PUT，路径末尾是文件名；返回一行最终链接）
-curl -T 报告.pdf -H "X-Px-Key: <你的key>" https://px.example.com/paste/报告.pdf
-# 传文件（表单方式）
-curl -F "file=@报告.pdf" -H "X-Px-Key: <你的key>" https://px.example.com/paste
+# 传文件（PUT，路径末尾是文件名；返回最终链接与 delete-token）
+curl -T 报告.pdf https://px.example.com/paste/报告.pdf
+# 传文件（表单方式；响应 JSON 带 token）
+curl -F "file=@报告.pdf" https://px.example.com/paste
 # 传一段文本
-curl -F "text=要中转的文字" -H "X-Px-Key: <你的key>" https://px.example.com/paste
+curl -F "text=要中转的文字" https://px.example.com/paste
 # 取文件（-J 用原始文件名保存）
-curl -J -H "X-Px-Key: <你的key>" "https://px.example.com/paste/<目录页里的文件名>"
+curl -J "https://px.example.com/paste/<目录页里的文件名>"
+# 删自己的文件
+curl -X DELETE -H "X-Paste-Token: <上传时返回的token>" "https://px.example.com/paste/<文件名>"
 ```
 
 ## 已知限制（先说清楚）

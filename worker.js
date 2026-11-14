@@ -149,6 +149,11 @@ const PASTE_BLOCKED_EXTS = new Set(["xml", "xsl", "svg", "js", "mjs", "cjs", "js
 const PASTE_INLINE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon", txt: "text/plain; charset=utf-8", md: "text/markdown; charset=utf-8" };
 const pasteExt = (name) => { const p = String(name || "").split("."); return p.length > 1 ? p.pop().toLowerCase() : ""; };
 const pasteBlocked = (name) => PASTE_BLOCKED_EXTS.has(pasteExt(name));
+// HTML 特殊规则（用户定）：可上传可渲染，但固定 15 分钟销毁，且打开必须凭上传时生成的 6 位随机钥匙
+const PASTE_HTML_EXTS = new Set(["html", "htm", "xhtml", "shtml"]);
+const PASTE_HTML_TTL_MS = 15 * 60 * 1000;
+const pasteIsHtml = (name) => PASTE_HTML_EXTS.has(pasteExt(name));
+const pasteHtmlKey = () => { const a = new Uint32Array(1); crypto.getRandomValues(a); return String(a[0] % 1000000).padStart(6, "0"); };
 async function pasteIpKey(request) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("paste:" + ip));
@@ -242,6 +247,7 @@ function pastePage(objs, isOwner) {
 <p class="sub">公开中转：这里的文件任何人都能看到和下载，别放敏感内容 · 销毁时间在下方自选（1 分钟 – 3 小时） · 共 ${objs.length} / ${PASTE_MAX_FILES} 个</p>
 <div class="card">
 <div class="line" style="margin-top:0;align-items:center"><label for="ttl" style="font-size:14px;color:#8a8378;white-space:nowrap">销毁时间</label><select id="ttl"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option><option value="180">3 小时</option></select></div>
+<p class="hint">HTML 文件单独一条规则：固定 15 分钟销毁，打开时要输入上传生成的 6 位钥匙（钥匙会显示在下方列表里你上传的那一行）。</p>
 <textarea id="t" rows="4" placeholder="粘贴文本到这里" style="margin-top:10px"></textarea>
 <div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn" title="存文本" aria-label="存文本">${ICON.filePlus}</button></div>
 <div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span></div>
@@ -263,6 +269,7 @@ h1{font-size:22px;margin:0 0 4px}
 .sub{color:#8a8378;font-size:13px;margin:0 0 18px}
 .card{background:#fff;border:1px solid #e7e0cd;border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:0 2px 10px rgba(90,80,50,.06)}
 textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;resize:vertical}
+.hint{font-size:12px;color:#8a8378;margin:8px 0 0}
 textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
 .line{display:flex;gap:8px;margin-top:10px}
 .line select{padding:9px 10px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7}
@@ -284,7 +291,7 @@ textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-col
 </style>
 <script>
 var msg = document.getElementById('msg');
-function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
+function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); if (j.htmlKey && j.name) saveHtmlKey(j.name, j.htmlKey); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
 document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
 document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
 var fi = document.getElementById('f'), dz = document.getElementById('dz'), fn = document.getElementById('fn');
@@ -296,6 +303,10 @@ dz.addEventListener('dragleave', function () { dz.classList.remove('over'); });
 dz.addEventListener('drop', function (e) { e.preventDefault(); dz.classList.remove('over'); if (e.dataTransfer.files.length) { try { fi.files = e.dataTransfer.files; } catch (err) {} showName(); } });
 function myTokens() { try { return JSON.parse(localStorage.getItem('pasteTokens') || '{}'); } catch (e) { return {}; } }
 function saveToken(name, token) { var m = myTokens(); m[name] = token; try { localStorage.setItem('pasteTokens', JSON.stringify(m)); } catch (e) {} }
+function myHtmlKeys() { try { return JSON.parse(localStorage.getItem('pasteHtmlKeys') || '{}'); } catch (e) { return {}; } }
+function saveHtmlKey(name, key) { var m = myHtmlKeys(); m[name] = key; try { localStorage.setItem('pasteHtmlKeys', JSON.stringify(m)); } catch (e) {} }
+var hks = myHtmlKeys();
+document.querySelectorAll('.row').forEach(function (row) { var k = row.getAttribute('data-k'); if (k && hks[k]) { var a = row.querySelector('a.nm'); if (a) a.href = '/paste/' + encodeURIComponent(k) + '?k=' + hks[k]; var chip = document.createElement('span'); chip.className = 'meta'; chip.textContent = '🔑 ' + hks[k]; var meta = row.querySelector('.meta'); if (meta) row.insertBefore(chip, meta); else row.appendChild(chip); } });
 function doDelete(k) { var t = myTokens()[k]; fetch('/paste/' + encodeURIComponent(k), { method: 'DELETE', headers: t ? { 'X-Paste-Token': t } : {} }).then(function () { location.reload(); }); }
 document.querySelectorAll('.del').forEach(function (b) { b.addEventListener('click', function () { doDelete(b.getAttribute('data-k')); }); });
 var TRASH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
@@ -306,6 +317,52 @@ document.querySelectorAll('.row').forEach(function (row) { var k = row.getAttrib
 
 const gonePage = (m) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paste</title><body style="font-family:system-ui;max-width:560px;margin:15vh auto;padding:0 16px;background:#f7f3ea;color:#222"><p>${escHtml(m)}</p><p><a href="/paste">返回目录</a></p>`;
 
+function htmlKeyPage(sub, obj, wrong) {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>需要钥匙 · paste</title>
+<body><div class="wrap">
+<p class="home"><a href="/paste">← 中转站目录</a></p>
+<h1>这个 HTML 文件需要钥匙</h1>
+<p class="sub">${escHtml(sub)} · 剩 ${pasteRemainText(obj)}自动销毁。输入上传时生成的 6 位钥匙才能打开。</p>
+${wrong ? '<p class="err">钥匙不对，再试一次。</p>' : ''}
+<form method="get" action="/paste/${encodeURIComponent(sub)}"><div class="line"><input name="k" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="6 位钥匙"><button class="btn" type="submit">打开</button></div></form>
+</div>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f7f3ea;color:#26241f;margin:0}
+.wrap{max-width:720px;margin:5vh auto;padding:0 16px 40px}
+.home{font-size:13px;margin:0 0 10px}
+.home a{color:#8a8378;text-decoration:none}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:#8a8378;font-size:13px;margin:0 0 18px}
+.err{color:#b3261e;font-size:14px}
+.line{display:flex;gap:8px}
+.line input{flex:1;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;min-width:0}
+.btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer}
+</style></body>`;
+}
+
+// HTML 钥匙门：无钥匙/错钥匙一律挡回输钥匙页；错钥匙按 文件+IP 计数，10 次后拦截猜测（对钥匙永远放行）；站长豁免
+async function htmlKeyGate(env, request, url, sub, obj, isOwner) {
+  const hk = obj.customMetadata && obj.customMetadata.hk;
+  if (!hk || isOwner) return null;
+  const k = url.searchParams.get("k");
+  if (k !== null && k === hk) return null;
+  if (k !== null && k !== "") {
+    try {
+      const ipk = await pasteIpKey(request);
+      const ck = "__rl/hk-" + ipk.slice(6) + "-" + sub.replace(/[^a-zA-Z0-9.-]/g, "_").slice(0, 48);
+      const cur = await env.PASTE.get(ck);
+      let n = 0;
+      if (cur) { try { n = JSON.parse(await cur.text()).n || 0; } catch { n = 0; } }
+      n += 1;
+      await env.PASTE.put(ck, JSON.stringify({ n }), { httpMetadata: { contentType: "application/json" } });
+      if (n >= 10) return htmlResp(gonePage("钥匙错误次数过多，猜测已被拦截；持有正确钥匙仍可打开"), 429);
+    } catch { /* 计数故障不挡输钥匙页 */ }
+    return htmlResp(htmlKeyPage(sub, obj, true), 403);
+  }
+  return htmlResp(htmlKeyPage(sub, obj, false), 403);
+}
+
 function servePasteFile(obj, sub) {
   // 安全下载：类型不采信上传者——只有图片与纯文本按扩展名写死类型内联预览，其余一律附件下载；
   // nosniff 防嗅探改判，CSP sandbox 让即便被当网页打开也跑不了脚本。保存名给原名。
@@ -313,6 +370,14 @@ function servePasteFile(obj, sub) {
   const ext = pasteExt(orig);
   const inlineType = PASTE_INLINE_TYPES[ext];
   const headers = new Headers({ "X-Robots-Tag": ROBOTS_TAG, "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox" });
+  if (obj.customMetadata && obj.customMetadata.hk) {
+    // 带钥匙的 HTML：渲染成网页，但关进沙箱（脚本可跑、源隔离，碰不到本站的 Cookie 与本地存储）
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    headers.set("Content-Disposition", "inline; filename*=UTF-8''" + encodeURIComponent(orig));
+    headers.set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-modals");
+    headers.set("Cache-Control", "no-store");
+    return new Response(obj.body, { headers });
+  }
   if (inlineType) {
     headers.set("Content-Type", inlineType);
     headers.set("Content-Disposition", "inline; filename*=UTF-8''" + encodeURIComponent(orig));
@@ -326,10 +391,14 @@ function servePasteFile(obj, sub) {
 async function handlePaste(request, env, KEY, url, sub) {
   const pxk = url.searchParams.get("pxk");
   const isOwner = authed(request, KEY, pxk);
-  // 文件下载凭地址即可、不用 key（公开后同样如此，类型安全由 servePasteFile 的安全头保证）
+  // 文件下载凭地址即可、不用 key（公开后同样如此，类型安全由 servePasteFile 的安全头保证；HTML 例外，走钥匙门）
   if (sub && request.method === "GET") {
     const obj0 = await env.PASTE.get(sub);
-    if (obj0 && !pasteExpired(obj0)) return servePasteFile(obj0, sub);
+    if (obj0 && !pasteExpired(obj0)) {
+      const gate = await htmlKeyGate(env, request, url, sub, obj0, isOwner);
+      if (gate) return gate;
+      return servePasteFile(obj0, sub);
+    }
     if (obj0) await env.PASTE.delete(sub);
   }
 
@@ -368,9 +437,13 @@ async function handlePaste(request, env, KEY, url, sub) {
       const stored = autoText ? await tsTextName(env) : await tsFileName(env, origName);
       if (autoText) origName = stored;
       const delToken = crypto.randomUUID();
-      const ttlMs = pasteTtlMs(fd.get("ttl"));
-      await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: origName, del: delToken, exp: String(Date.now() + ttlMs) } });
-      return jsonResp({ ok: true, name: stored, token: delToken, ttlMin: ttlMs / 60000 });
+      const isHtml = pasteIsHtml(origName);
+      const ttlMs = isHtml ? PASTE_HTML_TTL_MS : pasteTtlMs(fd.get("ttl"));
+      const meta = { kind: isHtml ? "html" : kind, name: origName, del: delToken, exp: String(Date.now() + ttlMs) };
+      let hk = null;
+      if (isHtml) { hk = pasteHtmlKey(); meta.hk = hk; }
+      await env.PASTE.put(stored, body, { httpMetadata: { contentType: ctype }, customMetadata: meta });
+      return jsonResp({ ok: true, name: stored, token: delToken, ttlMin: ttlMs / 60000, htmlKey: hk });
     }
     return new Response("method not allowed", { status: 405 });
   }
@@ -388,11 +461,15 @@ async function handlePaste(request, env, KEY, url, sub) {
     if (total + buf.byteLength > PASTE_MAX_TOTAL) return textResp("站内总量已满（1 GB）\n", 429);
     const stored = await tsFileName(env, orig);
     const ctype = request.headers.get("Content-Type") || "application/octet-stream";
-    const kind = ctype.startsWith("text/plain") ? "text" : "file";
+    const isHtml = pasteIsHtml(orig);
+    const kind = isHtml ? "html" : (ctype.startsWith("text/plain") ? "text" : "file");
     const delToken = crypto.randomUUID();
-    const ttlMs = pasteTtlMs(url.searchParams.get("ttl") || request.headers.get("X-Paste-Ttl"));
-    await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: { kind, name: orig, del: delToken, exp: String(Date.now() + ttlMs) } });
-    return textResp("ok\n" + url.origin + "/paste/" + encodeURIComponent(stored) + "\ndelete-token: " + delToken + "\nexpires-min: " + (ttlMs / 60000) + "\n");
+    const ttlMs = isHtml ? PASTE_HTML_TTL_MS : pasteTtlMs(url.searchParams.get("ttl") || request.headers.get("X-Paste-Ttl"));
+    const meta = { kind, name: orig, del: delToken, exp: String(Date.now() + ttlMs) };
+    let hk = null;
+    if (isHtml) { hk = pasteHtmlKey(); meta.hk = hk; }
+    await env.PASTE.put(stored, buf, { httpMetadata: { contentType: ctype }, customMetadata: meta });
+    return textResp("ok\n" + url.origin + "/paste/" + encodeURIComponent(stored) + "\ndelete-token: " + delToken + "\nexpires-min: " + (ttlMs / 60000) + "\n" + (hk ? "html-key: " + hk + "\nopen: " + url.origin + "/paste/" + encodeURIComponent(stored) + "?k=" + hk + "\n" : ""));
   }
   if (request.method === "DELETE") {
     if (!isOwner) {
@@ -412,6 +489,8 @@ async function handlePaste(request, env, KEY, url, sub) {
     await env.PASTE.delete(sub);
     return htmlResp(gonePage("文件已过期，已清除"), 410);
   }
+  const gate2 = await htmlKeyGate(env, request, url, sub, obj, isOwner);
+  if (gate2) return gate2;
   return servePasteFile(obj, sub);
 }
 

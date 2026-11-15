@@ -246,13 +246,21 @@ function pastePage(objs, isOwner) {
 <h1>临时中转站</h1>
 <p class="sub">临时中转：上传后会得到你的专属地址，凭地址取文件；目录不对外公开，别人看不到你的文件（但拿到地址的人就能下载，地址别乱传） · 销毁时间在下方自选（1 分钟 – 3 小时）${isOwner ? ' · 共 ' + objs.length + ' / ' + PASTE_MAX_FILES + ' 个' : ''}</p>
 <div class="card">
-<div class="line" style="margin-top:0;align-items:center"><label for="ttl" style="font-size:14px;color:#8a8378;white-space:nowrap">销毁时间</label><select id="ttl"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option><option value="180">3 小时</option></select></div>
+<div class="ttllab">销毁时间</div>
+<div class="ttls" id="ttls"><button type="button" data-v="1">1 分钟</button><button type="button" data-v="5">5 分钟</button><button type="button" data-v="15">15 分钟</button><button type="button" data-v="30" class="sel">30 分钟</button><button type="button" data-v="60">1 小时</button><button type="button" data-v="120">2 小时</button><button type="button" data-v="180">3 小时</button></div>
 <p class="hint">HTML 文件单独一条规则：固定 15 分钟销毁，打开时要输入上传生成的 6 位钥匙（钥匙会显示在下方「我传过的文件」里）。</p>
-<textarea id="t" rows="4" placeholder="粘贴文本到这里" style="margin-top:10px"></textarea>
-<div class="line"><input id="n" type="text" placeholder="文本文件名（可空）"><button id="bt" class="btn" title="存文本" aria-label="存文本">${ICON.filePlus}</button></div>
-<div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span></div>
+<div class="sect">
+<h3 class="secth">📝 存文本</h3>
+<textarea id="t" rows="4" placeholder="把文本粘贴到这里"></textarea>
+<input id="n" type="text" placeholder="文本文件名（可空）">
+<button id="bt" class="bigbtn">${ICON.filePlus}<span>存文本</span></button>
+</div>
+<div class="sect">
+<h3 class="secth">📁 传文件</h3>
+<div id="dz" title="选择文件"><span id="fn">${ICON.cloud}</span><p class="dzhint">点击选择文件，或把文件拖到这里</p></div>
 <input id="f" type="file" hidden>
-<div class="line" style="justify-content:flex-end"><button id="bf" class="btn" title="传文件" aria-label="传文件">${ICON.upload}</button></div>
+<button id="bf" class="bigbtn">${ICON.upload}<span>上传文件</span></button>
+</div>
 <p id="msg"></p>
 </div>
 <div class="card">
@@ -273,7 +281,18 @@ textarea{width:100%;padding:11px 12px;border:1px solid #ddd5c0;border-radius:10p
 .mineh{font-size:15px;margin:0 0 4px}
 textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
 .line{display:flex;gap:8px;margin-top:10px}
-.line select{padding:9px 10px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7}
+.ttllab{font-size:14px;color:#8a8378;margin:0 0 8px}
+.ttls{display:flex;flex-wrap:wrap;gap:8px}
+.ttls button{padding:10px 16px;border:1px solid #ddd5c0;background:#fffdf7;border-radius:999px;font-size:15px;cursor:pointer;color:#26241f}
+.ttls button.sel{background:#26241f;color:#fff;border-color:#26241f;font-weight:700}
+.sect{border:1px solid #eee3c8;border-radius:12px;padding:14px;margin-top:16px;background:#fffefa}
+.secth{font-size:17px;margin:0 0 10px}
+.sect input[type=text]{width:100%;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fff;margin-top:10px}
+.sect input[type=text]:focus{outline:2px solid #b7a86b;border-color:transparent}
+.bigbtn{width:100%;margin-top:14px;background:#26241f;color:#fff;border:none;border-radius:12px;padding:20px;font-size:19px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
+.bigbtn svg{width:30px;height:30px}
+.bigbtn:active{opacity:.75}
+.dzhint{margin:8px 0 0;font-size:14px}
 .line input[type=text]{flex:1;padding:10px 12px;border:1px solid #ddd5c0;border-radius:10px;font-size:15px;background:#fffdf7;min-width:0}
 .btn{background:#26241f;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center}
 .btn:active{opacity:.75}
@@ -292,7 +311,9 @@ textarea:focus,.line input[type=text]:focus{outline:2px solid #b7a86b;border-col
 </style>
 <script>
 var msg = document.getElementById('msg');
-function send(fd) { var ts = document.getElementById('ttl'); if (ts) fd.set('ttl', ts.value); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); if (j.htmlKey && j.name) saveHtmlKey(j.name, j.htmlKey); if (j.name && j.token) saveRecord({ n: j.name, t: j.token, h: j.htmlKey || null }); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
+var curTtl = 30;
+document.querySelectorAll('#ttls button').forEach(function (b) { b.addEventListener('click', function () { curTtl = parseInt(b.getAttribute('data-v'), 10); document.querySelectorAll('#ttls button').forEach(function (x) { x.classList.toggle('sel', x === b); }); }); });
+function send(fd) { fd.set('ttl', String(curTtl)); fetch('/paste', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { if (j.token && j.name) saveToken(j.name, j.token); if (j.htmlKey && j.name) saveHtmlKey(j.name, j.htmlKey); if (j.name && j.token) saveRecord({ n: j.name, t: j.token, h: j.htmlKey || null }); location.reload(); } else { msg.textContent = j.error || '上传失败'; } }).catch(function () { msg.textContent = '上传失败'; }); }
 document.getElementById('bt').addEventListener('click', function () { var t = document.getElementById('t').value; if (!t) { msg.textContent = '文本是空的'; return; } var fd = new FormData(); fd.set('text', t); var n = document.getElementById('n').value.trim(); if (n) fd.set('name', n); send(fd); });
 document.getElementById('bf').addEventListener('click', function () { var f = document.getElementById('f').files[0]; if (!f) { msg.textContent = '先选文件'; return; } var fd = new FormData(); fd.set('file', f); send(fd); });
 var fi = document.getElementById('f'), dz = document.getElementById('dz'), fn = document.getElementById('fn');

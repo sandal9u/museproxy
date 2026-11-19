@@ -566,12 +566,11 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // paste 已于 2026-11-19 迁至 nbfun.com/paste（同一 R2 桶）：此处一律 308 跳转（保留方法与请求体），老链接不断。
+    // 下方 handlePaste 等代码保留作后备与定时扫除（scheduled 仍在跑），不再对外服务。
     const pasteMatch = path.match(/^\/paste(?:\/(.*))?$/);
     if (pasteMatch) {
-      if (!env.PASTE) return new Response("paste not configured", { status: 500 });
-      let sub = "";
-      try { sub = decodeURIComponent(pasteMatch[1] || ""); } catch { sub = ""; }
-      return handlePaste(request, env, KEY, url, sub);
+      return new Response(null, { status: 308, headers: { Location: "https://nbfun.com" + url.pathname + url.search, "X-Robots-Tag": ROBOTS_TAG } });
     }
 
     if (path === "/robots.txt") {
